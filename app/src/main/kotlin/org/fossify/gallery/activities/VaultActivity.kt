@@ -254,6 +254,13 @@ class VaultActivity : SimpleActivity() {
             else MediaStore.Images.Media.EXTERNAL_CONTENT_URI
         }
 
+        // Pick the best timestamp we still have. EXIF/MediaStore "taken" is
+        // the right answer for items vaulted with v3.2+; for older items
+        // (where dateTaken=0), fall back to the time we recorded when the
+        // item was vaulted — still much better than letting MediaStore use
+        // the freshly-written file's "now".
+        val effectiveDate = if (item.dateTaken > 0L) item.dateTaken else item.dateAdded
+
         val values = ContentValues().apply {
             put(MediaStore.MediaColumns.DISPLAY_NAME, item.originalFilename)
             put(MediaStore.MediaColumns.MIME_TYPE, mime)
@@ -261,13 +268,13 @@ class VaultActivity : SimpleActivity() {
                 put(MediaStore.MediaColumns.RELATIVE_PATH, relativePath)
                 put(MediaStore.MediaColumns.IS_PENDING, 1)
             }
-            if (item.dateTaken > 0L) {
+            if (effectiveDate > 0L) {
                 // DATE_TAKEN is in milliseconds, DATE_MODIFIED/ADDED in seconds.
                 // Setting all three so gallery apps that prefer one over another
                 // still place the photo at its real date.
-                put(MediaStore.MediaColumns.DATE_TAKEN, item.dateTaken)
-                put(MediaStore.MediaColumns.DATE_MODIFIED, item.dateTaken / 1000L)
-                put(MediaStore.MediaColumns.DATE_ADDED, item.dateTaken / 1000L)
+                put(MediaStore.MediaColumns.DATE_TAKEN, effectiveDate)
+                put(MediaStore.MediaColumns.DATE_MODIFIED, effectiveDate / 1000L)
+                put(MediaStore.MediaColumns.DATE_ADDED, effectiveDate / 1000L)
             }
         }
 
@@ -289,14 +296,14 @@ class VaultActivity : SimpleActivity() {
             // Force the file's filesystem mtime to the original date — some
             // gallery apps display the file's last-modified time rather than
             // MediaStore's DATE_TAKEN.
-            if (item.dateTaken > 0L) {
+            if (effectiveDate > 0L) {
                 try {
                     val proj = arrayOf(MediaStore.MediaColumns.DATA)
                     resolver.query(uri, proj, null, null, null)?.use { c ->
                         if (c.moveToFirst()) {
                             val path = c.getString(0)
                             if (!path.isNullOrEmpty()) {
-                                java.io.File(path).setLastModified(item.dateTaken)
+                                java.io.File(path).setLastModified(effectiveDate)
                             }
                         }
                     }

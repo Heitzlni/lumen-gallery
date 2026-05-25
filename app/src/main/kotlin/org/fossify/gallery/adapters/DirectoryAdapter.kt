@@ -597,7 +597,14 @@ class DirectoryAdapter(
                         selectedDirs.size
                     )
                 )
+                // We already have encrypted copies in the vault — there's
+                // no value in shadowing the originals in the recycle bin
+                // too. Force the deletion path to skip the bin for this
+                // one call, then restore the user's normal preference.
+                val previousSkip = config.tempSkipRecycleBin
+                config.tempSkipRecycleBin = true
                 listener?.deleteFolders(foldersToDelete)
+                config.tempSkipRecycleBin = previousSkip
                 finishActMode()
             }
         }
