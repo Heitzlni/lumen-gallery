@@ -202,12 +202,22 @@ class VideoTrimActivity : SimpleActivity() {
         val (baseName, ext) = splitNameExt(originalName)
         val outName = "${baseName}_trimmed.${ext.ifEmpty { "mp4" }}"
 
+        // Carry the original "shot at" timestamp forward to the trimmed copy
+        // so it lands at the right place in the gallery timeline. Fall back
+        // to the source file's mtime, then to "now".
+        val sourceDate = extractSourceDateMs(sourcePath)
+
         val values = ContentValues().apply {
             put(MediaStore.Video.Media.DISPLAY_NAME, outName)
             put(MediaStore.Video.Media.MIME_TYPE, "video/mp4")
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 put(MediaStore.Video.Media.RELATIVE_PATH, "Movies/FossifyGallery")
                 put(MediaStore.Video.Media.IS_PENDING, 1)
+            }
+            if (sourceDate > 0L) {
+                put(MediaStore.MediaColumns.DATE_TAKEN, sourceDate)
+                put(MediaStore.MediaColumns.DATE_MODIFIED, sourceDate / 1000L)
+                put(MediaStore.MediaColumns.DATE_ADDED, sourceDate / 1000L)
             }
         }
 
@@ -244,6 +254,24 @@ class VideoTrimActivity : SimpleActivity() {
                 resolver.update(uri, finalValues, null, null)
             }
 
+            // Same belt-and-suspenders the vault restore uses: force the
+            // filesystem mtime so apps that rank by file time match those
+            // that read MediaStore DATE_TAKEN.
+            if (sourceDate > 0L) {
+                try {
+                    val proj = arrayOf(MediaStore.MediaColumns.DATA)
+                    resolver.query(uri, proj, null, null, null)?.use { c ->
+                        if (c.moveToFirst()) {
+                            val path = c.getString(0)
+                            if (!path.isNullOrEmpty()) {
+                                File(path).setLastModified(sourceDate)
+                            }
+                        }
+                    }
+                } catch (_: Exception) {
+                }
+            }
+
             tempFile.delete()
             isExporting = false
             runOnUiThread {
@@ -265,5 +293,39 @@ class VideoTrimActivity : SimpleActivity() {
         val idx = name.lastIndexOf('.')
         return if (idx <= 0) name to ""
         else name.substring(0, idx) to name.substring(idx + 1)
+    }
+
+    private fun extractSourceDateMs(path: String): Long {
+        // MP4/MOV containers expose a creation date through
+        // METADATA_KEY_DATE, typically ISO-8601 like "20240501T123456.000Z".
+        val retriever = android.media.MediaMetadataRetriever()
+        return try {
+            retriever.setDataSource(path)
+            val raw = retriever.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_DATE)
+            val parsed = if (!raw.isNullOrBlank()) parseMetadataDate(raw) else 0L
+            if (parsed > 0L) parsed else File(path).lastModified()
+        } catch (_: Exception) {
+            try { File(path).lastModified() } catch (_: Exception) { 0L }
+        } finally {
+            try { retriever.release() } catch (_: Exception) {}
+        }
+    }
+
+    private fun parseMetadataDate(raw: String): Long {
+        val formats = listOf(
+            "yyyyMMdd'T'HHmmss.SSS'Z'",
+            "yyyyMMdd'T'HHmmss'Z'",
+            "yyyy-MM-dd'T'HH:mm:ss'Z'",
+        )
+        for (f in formats) {
+            try {
+                val sdf = java.text.SimpleDateFormat(f, Locale.US).apply {
+                    timeZone = java.util.TimeZone.getTimeZone("UTC")
+                }
+                return sdf.parse(raw)?.time ?: continue
+            } catch (_: Exception) {
+            }
+        }
+        return 0L
     }
 }
