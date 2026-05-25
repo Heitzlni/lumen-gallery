@@ -24,8 +24,8 @@ import java.io.File
  */
 object ImageIndexer {
 
-    /** Minimum confidence required for ML Kit to return a label. Default is 0.5. */
-    private const val CONFIDENCE_THRESHOLD = 0.6f
+    /** Minimum confidence required for ML Kit to return a label. ML Kit's own default is 0.5. */
+    private const val CONFIDENCE_THRESHOLD = 0.5f
 
     /** Sentinel label used so we don't keep re-processing an image whose model returned no labels. */
     private const val SENTINEL_LABEL = "_no_labels_"
