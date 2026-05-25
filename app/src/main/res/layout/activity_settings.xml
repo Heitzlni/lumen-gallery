@@ -224,6 +224,36 @@
             </RelativeLayout>
 
             <RelativeLayout
+                android:id="@+id/settings_show_labels_holder"
+                style="@style/SettingsHolderTextViewOneLinerStyle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content">
+
+                <org.fossify.commons.views.MyTextView
+                    android:id="@+id/settings_show_labels"
+                    style="@style/SettingsTextLabelStyle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/photo_content_search_show_labels" />
+
+            </RelativeLayout>
+
+            <RelativeLayout
+                android:id="@+id/settings_clear_index_holder"
+                style="@style/SettingsHolderTextViewOneLinerStyle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content">
+
+                <org.fossify.commons.views.MyTextView
+                    android:id="@+id/settings_clear_index"
+                    style="@style/SettingsTextLabelStyle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/photo_content_search_clear" />
+
+            </RelativeLayout>
+
+            <RelativeLayout
                 android:id="@+id/settings_manage_hidden_folders_holder"
                 style="@style/SettingsHolderTextViewOneLinerStyle"
                 android:layout_width="match_parent"

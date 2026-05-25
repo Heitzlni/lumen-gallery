@@ -351,6 +351,12 @@
     <string name="photo_content_search_done">Indexed %1$d new photos.</string>
     <string name="photo_content_search_cancelled">Indexing cancelled (%1$d done).</string>
     <string name="photo_content_search_cancelling">Cancelling indexing…</string>
+    <string name="photo_content_search_show_labels">Show my labels</string>
+    <string name="photo_content_search_no_labels">No labels yet — run "Index photos" first.</string>
+    <string name="photo_content_search_labels_title">Labels in your library (%1$d)</string>
+    <string name="photo_content_search_clear">Clear photo content index</string>
+    <string name="photo_content_search_clear_confirm">Delete all photo labels? You can re-index afterwards.</string>
+    <string name="photo_content_search_cleared">Photo content index cleared.</string>
     <plurals name="vault_restore_confirm">
         <item quantity="one">Restore %d item back to your gallery and remove it from the vault?</item>
         <item quantity="other">Restore %d items back to your gallery and remove them from the vault?</item>

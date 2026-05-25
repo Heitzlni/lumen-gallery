@@ -28,4 +28,17 @@ interface ImageLabelDao {
 
     @Query("DELETE FROM image_labels")
     fun clearAll()
+
+    /**
+     * Aggregate every distinct label with how many images carry it, hottest
+     * first. Used by the "Show my labels" diagnostic so the user can see what
+     * the on-device model actually called their photos.
+     */
+    @Query("SELECT label, COUNT(*) AS image_count FROM image_labels WHERE label != '_no_labels_' GROUP BY label ORDER BY image_count DESC, label ASC")
+    fun labelCounts(): List<LabelCount>
 }
+
+data class LabelCount(
+    val label: String,
+    @androidx.room.ColumnInfo(name = "image_count") val imageCount: Int,
+)

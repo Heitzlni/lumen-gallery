@@ -61,6 +61,8 @@ class SettingsActivity : SimpleActivity() {
         setupManageExcludedFolders()
         setupOpenVault()
         setupIndexPhotos()
+        setupShowLabels()
+        setupClearIndex()
         setupManageHiddenFolders()
         setupSearchAllFiles()
         setupShowHiddenItems()
@@ -263,6 +265,43 @@ class SettingsActivity : SimpleActivity() {
             runOnUiThread {
                 binding.settingsIndexPhotosStatus.text =
                     getString(R.string.photo_content_search_indexed_count, indexed)
+            }
+        }
+    }
+
+    private fun setupShowLabels() {
+        binding.settingsShowLabelsHolder.setOnClickListener {
+            org.fossify.commons.helpers.ensureBackgroundThread {
+                val counts = applicationContext.imageLabelDB.labelCounts()
+                runOnUiThread {
+                    if (counts.isEmpty()) {
+                        toast(R.string.photo_content_search_no_labels)
+                        return@runOnUiThread
+                    }
+                    val body = counts.joinToString("\n") { "${it.label}   ${it.imageCount}" }
+                    androidx.appcompat.app.AlertDialog.Builder(this)
+                        .setTitle(getString(R.string.photo_content_search_labels_title, counts.size))
+                        .setMessage(body)
+                        .setPositiveButton(android.R.string.ok, null)
+                        .show()
+                }
+            }
+        }
+    }
+
+    private fun setupClearIndex() {
+        binding.settingsClearIndexHolder.setOnClickListener {
+            org.fossify.commons.dialogs.ConfirmationDialog(
+                this,
+                getString(R.string.photo_content_search_clear_confirm)
+            ) {
+                org.fossify.commons.helpers.ensureBackgroundThread {
+                    applicationContext.imageLabelDB.clearAll()
+                    runOnUiThread {
+                        toast(R.string.photo_content_search_cleared)
+                        refreshIndexStatus()
+                    }
+                }
             }
         }
     }
