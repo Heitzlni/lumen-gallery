@@ -1,8 +1,11 @@
 package org.fossify.gallery.activities
 
+import android.content.ContentValues
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
+import android.provider.MediaStore
 import androidx.core.content.FileProvider
 import org.fossify.commons.dialogs.ConfirmationDialog
 import org.fossify.commons.dialogs.SecurityDialog
@@ -20,6 +23,12 @@ import org.fossify.gallery.extensions.config
 import org.fossify.gallery.extensions.vaultItemDB
 import org.fossify.gallery.helpers.VaultCrypto
 import org.fossify.gallery.models.VaultItem
+import org.fossify.gallery.models.VaultListItem
+import java.io.FileInputStream
+import java.text.SimpleDateFormat
+import java.util.Calendar
+import java.util.Date
+import java.util.Locale
 
 class VaultActivity : SimpleActivity() {
 
@@ -80,7 +89,8 @@ class VaultActivity : SimpleActivity() {
 
     private fun reloadItems() {
         ensureBackgroundThread {
-            val items = ArrayList(vaultItemDB.getAll())
+            val items = vaultItemDB.getAll()
+            val rows = buildGroupedRows(items)
             runOnUiThread {
                 binding.vaultPlaceholder.apply {
                     text = getString(R.string.vault_empty)
@@ -90,10 +100,11 @@ class VaultActivity : SimpleActivity() {
 
                 val adapter = VaultAdapter(
                     activity = this,
-                    items = items,
+                    rows = rows,
                     recyclerView = binding.vaultList,
                     onActionDelete = { selected -> confirmAndDelete(selected) },
                     onActionExport = { selected -> exportItems(selected) },
+                    onActionRestore = { selected -> confirmAndRestore(selected) },
                 ) { itemClicked ->
                     val vaultItem = itemClicked as? VaultItem ?: return@VaultAdapter
                     openItem(vaultItem)
@@ -101,6 +112,26 @@ class VaultActivity : SimpleActivity() {
                 binding.vaultList.adapter = adapter
             }
         }
+    }
+
+    private fun buildGroupedRows(items: List<VaultItem>): ArrayList<VaultListItem> {
+        val rows = ArrayList<VaultListItem>(items.size + 8)
+        if (items.isEmpty()) return rows
+
+        val formatter = SimpleDateFormat("LLLL yyyy", Locale.getDefault())
+        var lastBucket: String? = null
+        val cal = Calendar.getInstance()
+        items.forEach { item ->
+            cal.time = Date(item.dateAdded)
+            // Bucket by year+month; format only when the bucket changes.
+            val bucketKey = "${cal.get(Calendar.YEAR)}-${cal.get(Calendar.MONTH)}"
+            if (bucketKey != lastBucket) {
+                lastBucket = bucketKey
+                rows.add(VaultListItem.Header(formatter.format(cal.time).replaceFirstChar { it.uppercase() }))
+            }
+            rows.add(VaultListItem.Entry(item))
+        }
+        return rows
     }
 
     private fun openItem(item: VaultItem) {
@@ -149,6 +180,82 @@ class VaultActivity : SimpleActivity() {
                 }
                 runOnUiThread { reloadItems() }
             }
+        }
+    }
+
+    private fun confirmAndRestore(items: ArrayList<VaultItem>) {
+        if (items.isEmpty()) return
+        val message = resources.getQuantityString(
+            R.plurals.vault_restore_confirm, items.size, items.size
+        )
+        ConfirmationDialog(this, message) {
+            ensureBackgroundThread {
+                var restored = 0
+                items.forEach { item ->
+                    if (restoreOne(item)) {
+                        VaultCrypto.deleteEncrypted(applicationContext, item.encryptedFilename)
+                        if (item.thumbnailFilename.isNotEmpty()) {
+                            VaultCrypto.deleteEncrypted(applicationContext, item.thumbnailFilename)
+                        }
+                        item.id?.let { vaultItemDB.deleteById(it) }
+                        restored++
+                    }
+                }
+                runOnUiThread {
+                    val msg = if (restored == 0) getString(R.string.vault_restore_failed)
+                    else getString(R.string.vault_restore_done, restored)
+                    toast(msg)
+                    reloadItems()
+                }
+            }
+        }
+    }
+
+    private fun restoreOne(item: VaultItem): Boolean {
+        val decrypted = VaultCrypto.decryptToCache(
+            applicationContext, item.encryptedFilename, item.originalFilename
+        ) ?: return false
+
+        val mime = item.mimeType.ifEmpty { "image/*" }
+        val isVideo = mime.startsWith("video/")
+        val relativePath = if (isVideo) "Movies/FossifyGallery" else "Pictures/FossifyGallery"
+        val collection = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            if (isVideo) MediaStore.Video.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
+            else MediaStore.Images.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
+        } else {
+            @Suppress("DEPRECATION")
+            if (isVideo) MediaStore.Video.Media.EXTERNAL_CONTENT_URI
+            else MediaStore.Images.Media.EXTERNAL_CONTENT_URI
+        }
+
+        val values = ContentValues().apply {
+            put(MediaStore.MediaColumns.DISPLAY_NAME, item.originalFilename)
+            put(MediaStore.MediaColumns.MIME_TYPE, mime)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                put(MediaStore.MediaColumns.RELATIVE_PATH, relativePath)
+                put(MediaStore.MediaColumns.IS_PENDING, 1)
+            }
+        }
+
+        val resolver = contentResolver
+        val uri = try {
+            resolver.insert(collection, values)
+        } catch (_: Exception) {
+            null
+        } ?: return false
+
+        return try {
+            resolver.openOutputStream(uri)?.use { out ->
+                FileInputStream(decrypted).use { input -> input.copyTo(out) }
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                val finalValues = ContentValues().apply { put(MediaStore.MediaColumns.IS_PENDING, 0) }
+                resolver.update(uri, finalValues, null, null)
+            }
+            true
+        } catch (e: Exception) {
+            try { resolver.delete(uri, null, null) } catch (_: Exception) {}
+            false
         }
     }
 

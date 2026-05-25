@@ -2,16 +2,17 @@ package org.fossify.gallery.helpers
 
 import android.content.Context
 import android.graphics.Bitmap
-import android.graphics.BitmapFactory
 import android.media.MediaMetadataRetriever
 import androidx.security.crypto.EncryptedFile
 import androidx.security.crypto.MasterKey
+import com.bumptech.glide.Glide
 import org.fossify.gallery.extensions.vaultDir
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.util.UUID
+import java.util.concurrent.TimeUnit
 
 object VaultCrypto {
 
@@ -95,7 +96,15 @@ object VaultCrypto {
             if (mimeType.startsWith("video/")) {
                 extractVideoFrame(sourcePath)
             } else {
-                decodeScaledImage(sourcePath, THUMB_MAX_DIM)
+                // Glide handles HEIC, RAW, oversized JPEG, etc. — BitmapFactory
+                // silently returns null on many of those formats.
+                Glide.with(context.applicationContext)
+                    .asBitmap()
+                    .load(sourcePath)
+                    .override(THUMB_MAX_DIM, THUMB_MAX_DIM)
+                    .centerCrop()
+                    .submit()
+                    .get(15, TimeUnit.SECONDS)
             }
         } catch (_: Exception) {
             null
@@ -150,22 +159,6 @@ object VaultCrypto {
     fun wipeCacheThumbnails(context: Context) {
         val dir = File(context.cacheDir, "vault_thumbs")
         if (dir.exists()) dir.listFiles()?.forEach { it.delete() }
-    }
-
-    private fun decodeScaledImage(path: String, maxDim: Int): Bitmap? {
-        val opts = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-        BitmapFactory.decodeFile(path, opts)
-        if (opts.outWidth <= 0 || opts.outHeight <= 0) return null
-
-        var sample = 1
-        while ((opts.outWidth / sample > maxDim * 2) && (opts.outHeight / sample > maxDim * 2)) {
-            sample *= 2
-        }
-        val decode = BitmapFactory.Options().apply {
-            inSampleSize = sample
-            inPreferredConfig = Bitmap.Config.RGB_565
-        }
-        return BitmapFactory.decodeFile(path, decode)
     }
 
     private fun extractVideoFrame(path: String): Bitmap? {
