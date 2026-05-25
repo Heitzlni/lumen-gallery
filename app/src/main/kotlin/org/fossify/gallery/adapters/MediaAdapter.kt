@@ -497,11 +497,64 @@ class MediaAdapter(
         val count = selectedKeys.size
         val message = String.format(activity.getString(R.string.vault_move_confirm), count)
         ConfirmationDialog(activity, message) {
-            performMoveToVault()
+            pickVaultAlbumThen { albumName ->
+                performMoveToVault(albumName)
+            }
         }
     }
 
-    private fun performMoveToVault() {
+    private fun pickVaultAlbumThen(onPicked: (albumName: String) -> Unit) {
+        ensureBackgroundThread {
+            val existing = activity.applicationContext.vaultItemDB
+                .getDistinctAlbumNames()
+                .filter { it.isNotEmpty() }
+                .sortedBy { it.lowercase() }
+
+            val defaultLabel = activity.getString(R.string.vault_default_album)
+            val newLabel = activity.getString(R.string.vault_new_album)
+            val options = mutableListOf<String>()
+            options.add(defaultLabel)
+            options.addAll(existing)
+            options.add(newLabel)
+
+            activity.runOnUiThread {
+                androidx.appcompat.app.AlertDialog.Builder(activity)
+                    .setTitle(R.string.vault_pick_album_title)
+                    .setItems(options.toTypedArray()) { _, which ->
+                        when {
+                            which == 0 -> onPicked("")
+                            which == options.size - 1 -> promptForNewAlbumName(onPicked)
+                            else -> onPicked(existing[which - 1])
+                        }
+                    }
+                    .setNegativeButton(android.R.string.cancel, null)
+                    .show()
+            }
+        }
+    }
+
+    private fun promptForNewAlbumName(onPicked: (albumName: String) -> Unit) {
+        val input = android.widget.EditText(activity).apply {
+            inputType = android.text.InputType.TYPE_CLASS_TEXT
+            hint = activity.getString(R.string.vault_new_album_hint)
+            setSingleLine(true)
+        }
+        val pad = (16 * activity.resources.displayMetrics.density).toInt()
+        val wrapper = android.widget.FrameLayout(activity).apply {
+            setPadding(pad, pad / 2, pad, 0)
+            addView(input)
+        }
+        androidx.appcompat.app.AlertDialog.Builder(activity)
+            .setTitle(R.string.vault_new_album)
+            .setView(wrapper)
+            .setPositiveButton(android.R.string.ok) { _, _ ->
+                onPicked(input.text.toString().trim())
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
+    private fun performMoveToVault(albumName: String) {
         val selectedItems = getSelectedItems()
         if (selectedItems.isEmpty()) return
 
@@ -535,6 +588,7 @@ class MediaAdapter(
                         thumbnailFilename = thumbnailName,
                         originalFolderPath = medium.parentPath,
                         dateTaken = takenOrModified,
+                        vaultAlbumName = albumName,
                     )
                     try {
                         activity.applicationContext.vaultItemDB.insert(item)

@@ -22,6 +22,8 @@ import org.fossify.gallery.adapters.VaultAdapter
 import org.fossify.gallery.databinding.ActivityVaultBinding
 import org.fossify.gallery.extensions.config
 import org.fossify.gallery.extensions.vaultItemDB
+import org.fossify.gallery.helpers.VAULT_ALBUM_NAME
+import org.fossify.gallery.helpers.VAULT_SHOW_ALL_ITEMS
 import org.fossify.gallery.helpers.VaultCrypto
 import org.fossify.gallery.models.VaultItem
 import org.fossify.gallery.models.VaultListItem
@@ -35,10 +37,22 @@ class VaultActivity : SimpleActivity() {
 
     private val binding by viewBinding(ActivityVaultBinding::inflate)
 
+    private var filterAlbumName: String? = null
+    private var showAllItems: Boolean = false
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(binding.root)
-        binding.vaultToolbar.title = getString(R.string.vault)
+
+        showAllItems = intent.getBooleanExtra(VAULT_SHOW_ALL_ITEMS, false)
+        filterAlbumName = if (showAllItems) null else intent.getStringExtra(VAULT_ALBUM_NAME)
+
+        binding.vaultToolbar.title = when {
+            showAllItems -> getString(R.string.vault_show_all_media)
+            filterAlbumName == null -> getString(R.string.vault)
+            filterAlbumName!!.isEmpty() -> getString(R.string.vault_default_album)
+            else -> filterAlbumName
+        }
 
         setupEdgeToEdge(
             padTopSystem = listOf(binding.vaultAppbar),
@@ -90,7 +104,11 @@ class VaultActivity : SimpleActivity() {
 
     private fun reloadItems() {
         ensureBackgroundThread {
-            val items = vaultItemDB.getAll()
+            val items = when {
+                showAllItems -> vaultItemDB.getAll()
+                filterAlbumName != null -> vaultItemDB.getByAlbum(filterAlbumName!!)
+                else -> vaultItemDB.getAll()
+            }
             val rows = buildGroupedRows(items)
             runOnUiThread {
                 binding.vaultPlaceholder.apply {

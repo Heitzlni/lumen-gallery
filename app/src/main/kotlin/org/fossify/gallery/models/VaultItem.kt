@@ -16,4 +16,5 @@ data class VaultItem(
     @ColumnInfo(name = "thumbnail_filename", defaultValue = "") var thumbnailFilename: String = "",
     @ColumnInfo(name = "original_folder_path", defaultValue = "") var originalFolderPath: String = "",
     @ColumnInfo(name = "date_taken", defaultValue = "0") var dateTaken: Long = 0L,
+    @ColumnInfo(name = "vault_album_name", defaultValue = "") var vaultAlbumName: String = "",
 )

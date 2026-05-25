@@ -59,6 +59,7 @@ class SettingsActivity : SimpleActivity() {
         setupFileLoadingPriority()
         setupManageIncludedFolders()
         setupManageExcludedFolders()
+        setupOpenVault()
         setupManageHiddenFolders()
         setupSearchAllFiles()
         setupShowHiddenItems()
@@ -221,6 +222,31 @@ class SettingsActivity : SimpleActivity() {
         binding.settingsManageExcludedFoldersHolder.setOnClickListener {
             handleExcludedFolderPasswordProtection {
                 startActivity(Intent(this, ExcludedFoldersActivity::class.java))
+            }
+        }
+    }
+
+    private fun setupOpenVault() {
+        binding.settingsOpenVaultHolder.setOnClickListener {
+            val storedHash = config.vaultProtectionHash
+            if (storedHash.isEmpty()) {
+                org.fossify.commons.dialogs.SecurityDialog(
+                    this, "", org.fossify.commons.helpers.SHOW_ALL_TABS
+                ) { hash, type, success ->
+                    if (success) {
+                        config.vaultProtectionHash = hash
+                        config.vaultProtectionType = type
+                        startActivity(Intent(this, VaultAlbumsActivity::class.java))
+                    }
+                }
+            } else {
+                org.fossify.commons.dialogs.SecurityDialog(
+                    this, storedHash, config.vaultProtectionType
+                ) { _, _, success ->
+                    if (success) {
+                        startActivity(Intent(this, VaultAlbumsActivity::class.java))
+                    }
+                }
             }
         }
     }

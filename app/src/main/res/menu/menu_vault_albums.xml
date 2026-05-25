@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    tools:ignore="AppCompatResource">
+    <item
+        android:id="@+id/show_all_vault_media"
+        android:title="@string/vault_show_all_media"
+        app:showAsAction="never" />
+    <item
+        android:id="@+id/change_vault_password"
+        android:showAsAction="never"
+        android:title="@string/vault_change_password"
+        app:showAsAction="never" />
+</menu>
