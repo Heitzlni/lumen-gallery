@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    tools:ignore="AppCompatResource,AlwaysShowAction">
+    <item
+        android:id="@+id/cab_vault_export"
+        android:title="@string/export_from_vault"
+        app:showAsAction="ifRoom" />
+    <item
+        android:id="@+id/cab_vault_delete"
+        android:icon="@drawable/ic_delete_vector"
+        android:title="@string/delete"
+        app:showAsAction="always" />
+    <item
+        android:id="@+id/cab_vault_select_all"
+        android:title="@string/select_all"
+        app:showAsAction="never" />
+</menu>

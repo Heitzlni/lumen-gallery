@@ -103,9 +103,11 @@
 
         <activity
             android:name=".activities.ViewPagerActivity"
-            android:configChanges="orientation|keyboardHidden|screenSize"
+            android:configChanges="orientation|keyboardHidden|screenSize|screenLayout|smallestScreenSize"
             android:exported="true"
             android:parentActivityName=".activities.MediaActivity"
+            android:resizeableActivity="true"
+            android:supportsPictureInPicture="true"
             android:theme="@style/TranslucentTheme">
 
             <intent-filter>
@@ -164,9 +166,11 @@
 
         <activity
             android:name=".activities.VideoPlayerActivity"
-            android:configChanges="orientation|keyboardHidden|screenSize"
+            android:configChanges="orientation|keyboardHidden|screenSize|screenLayout|smallestScreenSize"
             android:exported="false"
             android:parentActivityName=".activities.MediaActivity"
+            android:resizeableActivity="true"
+            android:supportsPictureInPicture="true"
             android:theme="@style/TranslucentTheme" />
 
         <activity
@@ -189,6 +193,20 @@
             android:exported="false"
             android:label="@string/hidden_folders"
             android:parentActivityName=".activities.SettingsActivity" />
+
+        <activity
+            android:name=".activities.VaultActivity"
+            android:configChanges="orientation"
+            android:exported="false"
+            android:label="@string/vault"
+            android:parentActivityName=".activities.MainActivity" />
+
+        <activity
+            android:name=".activities.VideoTrimActivity"
+            android:configChanges="orientation|screenSize"
+            android:exported="false"
+            android:label="@string/trim_video"
+            android:parentActivityName=".activities.MainActivity" />
 
         <activity
             android:name=".activities.PhotoActivity"

@@ -107,6 +107,7 @@ import org.fossify.gallery.interfaces.DateTakensDao
 import org.fossify.gallery.interfaces.DirectoryDao
 import org.fossify.gallery.interfaces.FavoritesDao
 import org.fossify.gallery.interfaces.MediumDao
+import org.fossify.gallery.interfaces.VaultItemDao
 import org.fossify.gallery.interfaces.WidgetsDao
 import org.fossify.gallery.models.AlbumCover
 import org.fossify.gallery.models.Directory
@@ -145,7 +146,17 @@ val Context.favoritesDB: FavoritesDao
 val Context.dateTakensDB: DateTakensDao
     get() = GalleryDatabase.getInstance(applicationContext).DateTakensDao()
 
+val Context.vaultItemDB: VaultItemDao
+    get() = GalleryDatabase.getInstance(applicationContext).VaultItemDao()
+
 val Context.recycleBin: File get() = filesDir
+
+val Context.vaultDir: File
+    get() {
+        val dir = File(filesDir, "vault")
+        if (!dir.exists()) dir.mkdirs()
+        return dir
+    }
 
 fun Context.movePinnedDirectoriesToFront(dirs: ArrayList<Directory>): ArrayList<Directory> {
     val foundFolders = ArrayList<Directory>()

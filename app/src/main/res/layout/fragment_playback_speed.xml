@@ -15,11 +15,29 @@
         android:text="@string/playback_speed"
         android:textSize="@dimen/actionbar_text_size" />
 
+    <HorizontalScrollView
+        android:id="@+id/playback_speed_presets_scroll"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_below="@+id/playback_speed_title"
+        android:layout_marginBottom="@dimen/medium_margin"
+        android:scrollbars="none">
+
+        <LinearLayout
+            android:id="@+id/playback_speed_presets"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingHorizontal="@dimen/small_margin" />
+
+    </HorizontalScrollView>
+
     <ImageView
         android:id="@+id/playback_speed_slow"
         android:layout_width="@dimen/smaller_icon_size"
         android:layout_height="@dimen/smaller_icon_size"
-        android:layout_below="@+id/playback_speed_title"
+        android:layout_below="@+id/playback_speed_presets_scroll"
         android:layout_alignStart="@+id/playback_speed_seekbar"
         android:background="?attr/selectableItemBackgroundBorderless"
         android:src="@drawable/ic_playback_speed_slow_vector" />
@@ -38,7 +56,7 @@
         android:id="@+id/playback_speed_fast"
         android:layout_width="@dimen/smaller_icon_size"
         android:layout_height="@dimen/smaller_icon_size"
-        android:layout_below="@+id/playback_speed_title"
+        android:layout_below="@+id/playback_speed_presets_scroll"
         android:layout_alignEnd="@+id/playback_speed_seekbar"
         android:background="?attr/selectableItemBackgroundBorderless"
         android:src="@drawable/ic_playback_speed_vector" />

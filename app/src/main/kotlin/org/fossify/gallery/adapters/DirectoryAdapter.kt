@@ -184,6 +184,10 @@ class DirectoryAdapter(
             findItem(R.id.cab_lock).isVisible = selectedPaths.any { !config.isFolderProtected(it) }
             findItem(R.id.cab_unlock).isVisible = selectedPaths.any { config.isFolderProtected(it) }
 
+            val hiddenFromAll = config.hiddenFromAllFolders
+            findItem(R.id.cab_hide_from_all).isVisible = selectedPaths.any { it !in hiddenFromAll }
+            findItem(R.id.cab_show_in_all).isVisible = selectedPaths.any { it in hiddenFromAll }
+
             findItem(R.id.cab_empty_recycle_bin).isVisible = isOneItemSelected && selectedPaths.first() == RECYCLE_BIN
             findItem(R.id.cab_empty_disable_recycle_bin).isVisible = isOneItemSelected && selectedPaths.first() == RECYCLE_BIN
 
@@ -212,6 +216,8 @@ class DirectoryAdapter(
             R.id.cab_hide -> toggleFoldersVisibility(true)
             R.id.cab_unhide -> toggleFoldersVisibility(false)
             R.id.cab_exclude -> tryExcludeFolder()
+            R.id.cab_hide_from_all -> hideSelectedFromShowAll()
+            R.id.cab_show_in_all -> showSelectedInShowAll()
             R.id.cab_lock -> tryLockFolder()
             R.id.cab_unlock -> unlockFolder()
             R.id.cab_copy_to -> copyFilesTo()
@@ -498,6 +504,22 @@ class DirectoryAdapter(
             listener?.refreshItems()
             finishActMode()
         }
+    }
+
+    private fun hideSelectedFromShowAll() {
+        val paths = getSelectedPaths()
+        if (paths.isEmpty()) return
+        config.addHiddenFromAllFolders(paths)
+        listener?.refreshItems()
+        finishActMode()
+    }
+
+    private fun showSelectedInShowAll() {
+        val paths = getSelectedPaths()
+        if (paths.isEmpty()) return
+        config.removeHiddenFromAllFolders(paths)
+        listener?.refreshItems()
+        finishActMode()
     }
 
     private fun tryLockFolder() {

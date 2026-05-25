@@ -162,7 +162,7 @@ class Config(context: Context) : BaseConfig(context) {
         set(includedFolders) = prefs.edit().remove(INCLUDED_FOLDERS).putStringSet(INCLUDED_FOLDERS, includedFolders).apply()
 
     var autoplayVideos: Boolean
-        get() = prefs.getBoolean(AUTOPLAY_VIDEOS, false)
+        get() = prefs.getBoolean(AUTOPLAY_VIDEOS, true)
         set(autoplayVideos) = prefs.edit().putBoolean(AUTOPLAY_VIDEOS, autoplayVideos).apply()
 
     var animateGifs: Boolean
@@ -210,7 +210,7 @@ class Config(context: Context) : BaseConfig(context) {
         set(fileLoadingPriority) = prefs.edit().putInt(FILE_LOADING_PRIORITY, fileLoadingPriority).apply()
 
     var loopVideos: Boolean
-        get() = prefs.getBoolean(LOOP_VIDEOS, false)
+        get() = prefs.getBoolean(LOOP_VIDEOS, true)
         set(loop) = prefs.edit().putBoolean(LOOP_VIDEOS, loop).apply()
 
     var muteVideos: Boolean
@@ -414,7 +414,7 @@ class Config(context: Context) : BaseConfig(context) {
         set(wasSVGShowingHandled) = prefs.edit().putBoolean(WAS_SVG_SHOWING_HANDLED, wasSVGShowingHandled).apply()
 
     var groupBy: Int
-        get() = prefs.getInt(GROUP_BY, GROUP_BY_NONE)
+        get() = prefs.getInt(GROUP_BY, GROUP_BY_DATE_TAKEN_DAILY or GROUP_DESCENDING)
         set(groupBy) = prefs.edit().putInt(GROUP_BY, groupBy).apply()
 
     var useRecycleBin: Boolean
@@ -602,4 +602,39 @@ class Config(context: Context) : BaseConfig(context) {
     var showPermissionRationale: Boolean
         get() = prefs.getBoolean(SHOW_PERMISSION_RATIONALE, false)
         set(showPermissionRationale) = prefs.edit().putBoolean(SHOW_PERMISSION_RATIONALE, showPermissionRationale).apply()
+
+    var vaultProtectionHash: String
+        get() = prefs.getString(VAULT_PROTECTION_HASH, "")!!
+        set(value) = prefs.edit().putString(VAULT_PROTECTION_HASH, value).apply()
+
+    var vaultProtectionType: Int
+        get() = prefs.getInt(VAULT_PROTECTION_TYPE, PROTECTION_PATTERN)
+        set(value) = prefs.edit().putInt(VAULT_PROTECTION_TYPE, value).apply()
+
+    var enablePictureInPicture: Boolean
+        get() = prefs.getBoolean(ENABLE_PIP, true)
+        set(value) = prefs.edit().putBoolean(ENABLE_PIP, value).apply()
+
+    var hiddenFromAllFolders: MutableSet<String>
+        get() = prefs.getStringSet(HIDDEN_FROM_ALL_FOLDERS, HashSet())!!
+        set(value) = prefs.edit().remove(HIDDEN_FROM_ALL_FOLDERS).putStringSet(HIDDEN_FROM_ALL_FOLDERS, value).apply()
+
+    fun addHiddenFromAllFolders(paths: Collection<String>) {
+        val current = HashSet(hiddenFromAllFolders)
+        current.addAll(paths)
+        hiddenFromAllFolders = current
+    }
+
+    fun removeHiddenFromAllFolders(paths: Collection<String>) {
+        val current = HashSet(hiddenFromAllFolders)
+        current.removeAll(paths.toSet())
+        hiddenFromAllFolders = current
+    }
+
+    fun isHiddenFromAll(path: String) = hiddenFromAllFolders.any { path == it || path.startsWith("$it/") }
 }
+
+private const val VAULT_PROTECTION_HASH = "vault_protection_hash"
+private const val VAULT_PROTECTION_TYPE = "vault_protection_type"
+private const val ENABLE_PIP = "enable_picture_in_picture"
+private const val HIDDEN_FROM_ALL_FOLDERS = "hidden_from_all_folders"

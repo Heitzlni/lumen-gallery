@@ -65,6 +65,7 @@ class SettingsActivity : SimpleActivity() {
         setupAutoplayVideos()
         setupRememberLastVideo()
         setupLoopVideos()
+        setupPictureInPicture()
         setupOpenVideosOnSeparateScreen()
         setupOnVideoTap()
         setupMaxBrightness()
@@ -289,6 +290,14 @@ class SettingsActivity : SimpleActivity() {
         binding.settingsLoopVideosHolder.setOnClickListener {
             binding.settingsLoopVideos.toggle()
             config.loopVideos = binding.settingsLoopVideos.isChecked
+        }
+    }
+
+    private fun setupPictureInPicture() {
+        binding.settingsPictureInPicture.isChecked = config.enablePictureInPicture
+        binding.settingsPictureInPictureHolder.setOnClickListener {
+            binding.settingsPictureInPicture.toggle()
+            config.enablePictureInPicture = binding.settingsPictureInPicture.isChecked
         }
     }
 
