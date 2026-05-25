@@ -38,7 +38,11 @@ class GetMediaAsynctask(
         val dateTakens = if (getProperDateTaken) mediaFetcher.getDateTakens() else HashMap()
 
         val media = if (showAll) {
-            val foldersToScan = mediaFetcher.getFoldersToScan().filter { it != RECYCLE_BIN && it != FAVORITES && !context.config.isFolderProtected(it) }
+            val foldersToScan = mediaFetcher.getFoldersToScan().filter {
+                it != RECYCLE_BIN && it != FAVORITES &&
+                    !context.config.isFolderProtected(it) &&
+                    !context.config.isHiddenFromAll(it)
+            }
             val media = ArrayList<Medium>()
             foldersToScan.forEach {
                 val newMedia = mediaFetcher.getFilesFrom(

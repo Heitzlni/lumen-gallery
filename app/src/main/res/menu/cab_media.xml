@@ -68,6 +68,11 @@
         android:title="@string/move_to"
         app:showAsAction="never" />
     <item
+        android:id="@+id/cab_move_to_vault"
+        android:showAsAction="never"
+        android:title="@string/move_to_vault"
+        app:showAsAction="never" />
+    <item
         android:id="@+id/cab_create_shortcut"
         android:showAsAction="never"
         android:title="@string/create_shortcut"
@@ -86,6 +91,11 @@
         android:id="@+id/cab_resize"
         android:showAsAction="never"
         android:title="@string/resize"
+        app:showAsAction="never" />
+    <item
+        android:id="@+id/cab_trim_video"
+        android:showAsAction="never"
+        android:title="@string/trim_video"
         app:showAsAction="never" />
     <item
         android:id="@+id/cab_edit"

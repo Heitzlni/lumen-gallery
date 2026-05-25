@@ -86,6 +86,16 @@
         android:title="@string/exclude"
         app:showAsAction="never" />
     <item
+        android:id="@+id/cab_hide_from_all"
+        android:showAsAction="never"
+        android:title="@string/hide_from_all"
+        app:showAsAction="never" />
+    <item
+        android:id="@+id/cab_show_in_all"
+        android:showAsAction="never"
+        android:title="@string/show_in_all"
+        app:showAsAction="never" />
+    <item
         android:id="@+id/cab_lock"
         android:showAsAction="never"
         android:title="@string/lock_folder"

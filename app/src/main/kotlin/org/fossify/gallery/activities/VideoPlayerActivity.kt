@@ -182,11 +182,36 @@ open class VideoPlayerActivity : BaseViewerActivity(), SeekBar.OnSeekBarChangeLi
 
     override fun onPause() {
         super.onPause()
-        pauseVideo()
+        val isInPip = android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O &&
+            isInPictureInPictureMode
+        if (!isInPip) {
+            pauseVideo()
+        }
 
         if (config.rememberLastVideoPosition && mWasVideoStarted) {
             saveVideoProgress()
         }
+    }
+
+    override fun onUserLeaveHint() {
+        super.onUserLeaveHint()
+        if (!config.enablePictureInPicture) return
+        if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.O) return
+        if (isInPictureInPictureMode) return
+        try {
+            enterPictureInPictureMode(android.app.PictureInPictureParams.Builder().build())
+        } catch (_: Exception) {
+        }
+    }
+
+    override fun onPictureInPictureModeChanged(
+        isInPictureInPictureMode: Boolean,
+        newConfig: android.content.res.Configuration
+    ) {
+        super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
+        val chromeVisibility = if (isInPictureInPictureMode) android.view.View.GONE else android.view.View.VISIBLE
+        binding.videoAppbar.visibility = chromeVisibility
+        binding.bottomVideoTimeHolder.root.visibility = chromeVisibility
     }
 
     override fun onDestroy() {
@@ -719,8 +744,26 @@ open class VideoPlayerActivity : BaseViewerActivity(), SeekBar.OnSeekBarChangeLi
     private fun initTimeHolder() {
         binding.bottomVideoTimeHolder.videoSeekbar.setOnSeekBarChangeListener(this)
         binding.bottomVideoTimeHolder.videoSeekbar.max = mDuration.toInt()
-        binding.bottomVideoTimeHolder.videoDuration.text = mDuration.getFormattedDuration()
+        binding.bottomVideoTimeHolder.videoDuration.apply {
+            if (mDuration > 0L) {
+                text = mDuration.getFormattedDuration()
+                visibility = android.view.View.VISIBLE
+            } else {
+                visibility = android.view.View.INVISIBLE
+            }
+        }
         binding.bottomVideoTimeHolder.videoCurrTime.text = mCurrTime.getFormattedDuration()
+
+        val scrubSpeedView = binding.bottomVideoTimeHolder.videoScrubSpeed
+        binding.bottomVideoTimeHolder.videoSeekbar.fineModeListener = { scale ->
+            if (scale >= 0.99f) {
+                scrubSpeedView.visibility = android.view.View.GONE
+            } else {
+                scrubSpeedView.text = getString(R.string.scrub_speed_label, scale)
+                scrubSpeedView.visibility = android.view.View.VISIBLE
+            }
+        }
+
         applyProperHorizontalInsets(binding.bottomVideoTimeHolder.videoTimeHolder)
         setupTimer()
     }
@@ -870,11 +913,17 @@ open class VideoPlayerActivity : BaseViewerActivity(), SeekBar.OnSeekBarChangeLi
 
     override fun onStartTrackingTouch(seekBar: SeekBar?) {
         mIsDragged = true
+        mExoPlayer?.setSeekParameters(SeekParameters.CLOSEST_SYNC)
     }
 
     override fun onStopTrackingTouch(seekBar: SeekBar?) {
         if (mExoPlayer == null)
             return
+
+        mExoPlayer?.setSeekParameters(SeekParameters.EXACT)
+        // Re-seek precisely to the final position so the visible frame matches
+        // the released scrub position, not the nearest keyframe.
+        mExoPlayer?.seekTo(mExoPlayer?.currentPosition ?: 0L)
 
         if (mIsPlaying) {
             mExoPlayer!!.playWhenReady = true

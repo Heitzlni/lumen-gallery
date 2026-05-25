@@ -263,6 +263,34 @@ class ViewPagerActivity : BaseViewerActivity(), ViewPager.OnPageChangeListener, 
         stopSlideshow()
     }
 
+    override fun onUserLeaveHint() {
+        super.onUserLeaveHint()
+        if (!config.enablePictureInPicture) return
+        if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.O) return
+        val current = getCurrentMedium() ?: return
+        if (!current.isVideo()) return
+        if (isInPictureInPictureMode) return
+        try {
+            enterPictureInPictureMode(android.app.PictureInPictureParams.Builder().build())
+        } catch (_: Exception) {
+            // PiP not available on this device / state
+        }
+    }
+
+    override fun onPictureInPictureModeChanged(
+        isInPictureInPictureMode: Boolean,
+        newConfig: android.content.res.Configuration
+    ) {
+        super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
+        // Hide the toolbar + bottom actions while in PiP so only the video is
+        // visible in the floating window. Restored when returning to full UI.
+        val chromeVisibility = if (isInPictureInPictureMode) android.view.View.GONE else android.view.View.VISIBLE
+        binding.mediumViewerAppbar.visibility = chromeVisibility
+        if (config.bottomActions) {
+            binding.bottomActions.root.visibility = chromeVisibility
+        }
+    }
+
     override fun onDestroy() {
         super.onDestroy()
         ColorModeHelper.resetColorMode(this)

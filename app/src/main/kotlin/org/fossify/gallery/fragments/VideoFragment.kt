@@ -199,6 +199,16 @@ class VideoFragment : ViewPagerFragment(), TextureView.SurfaceTextureListener,
             // adding an empty click listener just to avoid ripple animation at toggling fullscreen
             mSeekBar.setOnClickListener { }
 
+            val scrubSpeedView = bottomVideoTimeHolder.videoScrubSpeed
+            bottomVideoTimeHolder.videoSeekbar.fineModeListener = { scale ->
+                if (scale >= 0.99f) {
+                    scrubSpeedView.visibility = android.view.View.GONE
+                } else {
+                    scrubSpeedView.text = getString(R.string.scrub_speed_label, scale)
+                    scrubSpeedView.visibility = android.view.View.VISIBLE
+                }
+            }
+
             mTimeHolder = bottomVideoTimeHolder.videoTimeHolder
             mCurrTimeView = bottomVideoTimeHolder.videoCurrTime
             mBrightnessSideScroll = videoBrightnessController
@@ -216,7 +226,8 @@ class VideoFragment : ViewPagerFragment(), TextureView.SurfaceTextureListener,
                 GestureDetector(context, object : GestureDetector.SimpleOnGestureListener() {
                     override fun onSingleTapConfirmed(e: MotionEvent): Boolean {
                         if (!mConfig.allowInstantChange) {
-                            toggleFullscreen()
+                            // YouTube-style: single tap on video pauses / resumes.
+                            togglePlayPause()
                             return true
                         }
 
@@ -226,7 +237,7 @@ class VideoFragment : ViewPagerFragment(), TextureView.SurfaceTextureListener,
                         when {
                             clickedX <= instantWidth -> listener?.goToPrevItem()
                             clickedX >= viewWidth - instantWidth -> listener?.goToNextItem()
-                            else -> toggleFullscreen()
+                            else -> togglePlayPause()
                         }
                         return true
                     }
@@ -384,7 +395,13 @@ class VideoFragment : ViewPagerFragment(), TextureView.SurfaceTextureListener,
     override fun onPause() {
         super.onPause()
         storeStateVariables()
-        pauseVideo()
+        // Keep playing when the activity is going into Picture-in-Picture mode
+        // — that's the whole point of PiP.
+        val isInPip = android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O &&
+            activity?.isInPictureInPictureMode == true
+        if (!isInPip) {
+            pauseVideo()
+        }
         if (mStoredRememberLastVideoPosition && mIsFragmentVisible && mWasVideoStarted) {
             saveVideoProgress()
         }
@@ -454,7 +471,16 @@ class VideoFragment : ViewPagerFragment(), TextureView.SurfaceTextureListener,
 
     private fun setupTimeHolder() {
         mSeekBar.max = mDuration.toInt()
-        binding.bottomVideoTimeHolder.videoDuration.text = mDuration.getFormattedDuration()
+        // Hide the duration label until we actually know the duration — avoids
+        // a "0:00" flash while metadata is being read on first load.
+        binding.bottomVideoTimeHolder.videoDuration.apply {
+            if (mDuration > 0L) {
+                text = mDuration.getFormattedDuration()
+                visibility = android.view.View.VISIBLE
+            } else {
+                visibility = android.view.View.INVISIBLE
+            }
+        }
         setupTimer()
     }
 
@@ -595,13 +621,8 @@ class VideoFragment : ViewPagerFragment(), TextureView.SurfaceTextureListener,
     }
 
     private fun handleDoubleTap(x: Float) {
-        val viewWidth = mView.width
-        val instantWidth = viewWidth / 7
-        when {
-            x <= instantWidth -> doSkip(false)
-            x >= viewWidth - instantWidth -> doSkip(true)
-            else -> togglePlayPause()
-        }
+        // YouTube-style: double-tap left half = -10s, right half = +10s.
+        if (x < mView.width / 2f) doSkip(false) else doSkip(true)
     }
 
     private fun checkExtendedDetails() {
@@ -746,6 +767,7 @@ class VideoFragment : ViewPagerFragment(), TextureView.SurfaceTextureListener,
         }
 
         mExoPlayer!!.playWhenReady = false
+        mExoPlayer!!.setSeekParameters(SeekParameters.CLOSEST_SYNC)
         mIsDragged = true
     }
 
@@ -758,6 +780,12 @@ class VideoFragment : ViewPagerFragment(), TextureView.SurfaceTextureListener,
         if (mExoPlayer == null) {
             return
         }
+
+        mExoPlayer!!.setSeekParameters(SeekParameters.EXACT)
+        // Re-seek precisely to the final position so the displayed frame
+        // matches where the user released the scrubber, not the nearest
+        // keyframe used during the fast drag.
+        mExoPlayer!!.seekTo(mExoPlayer!!.currentPosition)
 
         if (mIsPlaying) {
             mExoPlayer!!.playWhenReady = true

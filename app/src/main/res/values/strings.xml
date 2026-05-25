@@ -299,6 +299,38 @@
     <string name="faq_17_text">That stopped working due to the system changes that came with Android 11 too, the app cannot browse real folders anymore, it relies on the so called MediaStore at fetching data.</string>
     <string name="faq_18_title">Why do I see ads during video playback?</string>
     <string name="faq_18_text">Our apps have no ads whatsoever. If you see them during video playback, you must be using some other apps video player. Try finding your default video player in the device settings, then do a \"Clear defaults\" on it. The next time you invoke some video intent you will see an app picker prompt, where you can select what app you want to use.</string>
+    <!-- Video player scrub -->
+    <string name="scrub_speed_label">%1$.2fx scrub</string>
+    <string name="picture_in_picture">Picture-in-Picture for videos</string>
+    <!-- Hide-from-Show-All -->
+    <string name="hide_from_all">Hide from Show All</string>
+    <string name="show_in_all">Show in Show All</string>
+    <!-- Video trim -->
+    <string name="trim_video">Trim video</string>
+    <string name="save">Save</string>
+    <string name="trimming_in_progress">Trimming video…</string>
+    <string name="trim_selection_length">%1$s selected</string>
+    <string name="trim_saved_as">Saved as %1$s in Movies/FossifyGallery</string>
+    <string name="trim_failed">Trim failed: %1$s</string>
+    <string name="trim_too_short">Trim selection is too short.</string>
+    <!-- Vault -->
+    <string name="vault">Vault</string>
+    <string name="vault_change_password">Change vault password</string>
+    <string name="vault_password_changed">Vault password changed.</string>
+    <string name="vault_no_password_set">No vault password set yet.</string>
+    <string name="vault_empty">No items in the vault yet. Long-press photos in your gallery and choose \"Move to vault\".</string>
+    <string name="vault_setup_password">Set a vault password</string>
+    <string name="vault_enter_password">Enter vault password</string>
+    <string name="move_to_vault">Move to vault</string>
+    <string name="export_from_vault">Export from vault</string>
+    <string name="vault_decrypt_failed">Could not decrypt this item.</string>
+    <string name="vault_no_viewer">No app available to view this file.</string>
+    <string name="vault_move_confirm">Move %1$d item(s) into the vault? The originals will be deleted from your gallery.</string>
+    <string name="vault_move_done">Moved %1$d item(s) into the vault.</string>
+    <plurals name="vault_delete_confirm">
+        <item quantity="one">Permanently delete %d item from the vault?</item>
+        <item quantity="other">Permanently delete %d items from the vault?</item>
+    </plurals>
     <!--
         Haven't found some strings? There's more at
         https://github.com/FossifyOrg/Commons/tree/master/commons/src/main/res

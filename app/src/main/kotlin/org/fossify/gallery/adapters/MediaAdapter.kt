@@ -15,9 +15,11 @@ import com.bumptech.glide.Glide
 import com.qtalk.recyclerviewfastscroller.RecyclerViewFastScroller
 import org.fossify.commons.activities.BaseSimpleActivity
 import org.fossify.commons.adapters.MyRecyclerViewAdapter
+import org.fossify.commons.dialogs.ConfirmationDialog
 import org.fossify.commons.dialogs.PropertiesDialog
 import org.fossify.commons.dialogs.RenameDialog
 import org.fossify.commons.dialogs.RenameItemDialog
+import org.fossify.commons.dialogs.SecurityDialog
 import org.fossify.commons.extensions.applyColorFilter
 import org.fossify.commons.extensions.beGone
 import org.fossify.commons.extensions.beVisible
@@ -43,6 +45,7 @@ import org.fossify.commons.extensions.recycleBinPath
 import org.fossify.commons.extensions.rescanPaths
 import org.fossify.commons.extensions.toast
 import org.fossify.commons.helpers.FAVORITES
+import org.fossify.commons.helpers.SHOW_ALL_TABS
 import org.fossify.commons.helpers.VIEW_TYPE_LIST
 import org.fossify.commons.helpers.ensureBackgroundThread
 import org.fossify.commons.helpers.isRPlus
@@ -78,6 +81,9 @@ import org.fossify.gallery.extensions.tryCopyMoveFilesTo
 import org.fossify.gallery.extensions.updateDBMediaPath
 import org.fossify.gallery.extensions.updateFavorite
 import org.fossify.gallery.extensions.updateFavoritePaths
+import org.fossify.gallery.extensions.vaultItemDB
+import org.fossify.gallery.helpers.VaultCrypto
+import org.fossify.gallery.models.VaultItem
 import org.fossify.gallery.helpers.PATH
 import org.fossify.gallery.helpers.RECYCLE_BIN
 import org.fossify.gallery.helpers.ROUNDED_CORNERS_BIG
@@ -191,10 +197,13 @@ class MediaAdapter(
             findItem(R.id.cab_add_to_favorites).isVisible = !isInRecycleBin
             findItem(R.id.cab_fix_date_taken).isVisible = !isInRecycleBin
             findItem(R.id.cab_move_to).isVisible = !isInRecycleBin
+            findItem(R.id.cab_move_to_vault).isVisible = !isInRecycleBin
             findItem(R.id.cab_open_with).isVisible = isOneItemSelected
             findItem(R.id.cab_edit).isVisible = isOneItemSelected
             findItem(R.id.cab_set_as).isVisible = isOneItemSelected
             findItem(R.id.cab_resize).isVisible = canResize(selectedItems)
+            findItem(R.id.cab_trim_video).isVisible =
+                isOneItemSelected && !isInRecycleBin && (selectedItems.firstOrNull()?.isVideo() == true)
             findItem(R.id.cab_confirm_selection).isVisible = isAGetIntent && allowMultiplePicks && selectedKeys.isNotEmpty()
             findItem(R.id.cab_restore_recycle_bin_files).isVisible = selectedPaths.all { it.startsWith(activity.recycleBinPath) }
             findItem(R.id.cab_create_shortcut).isVisible = isOneItemSelected
@@ -225,12 +234,14 @@ class MediaAdapter(
             R.id.cab_rotate_one_eighty -> rotateSelection(180)
             R.id.cab_copy_to -> checkMediaManagementAndCopy(true)
             R.id.cab_move_to -> moveFilesTo()
+            R.id.cab_move_to_vault -> tryMoveToVault()
             R.id.cab_create_shortcut -> createShortcut()
             R.id.cab_select_all -> selectAll()
             R.id.cab_open_with -> openPath()
             R.id.cab_fix_date_taken -> fixDateTaken()
             R.id.cab_set_as -> setAs()
             R.id.cab_resize -> resize()
+            R.id.cab_trim_video -> launchVideoTrim()
             R.id.cab_delete -> checkDeleteConfirmation()
         }
     }
@@ -451,6 +462,97 @@ class MediaAdapter(
     private fun moveFilesTo() {
         activity.handleDeletePasswordProtection {
             checkMediaManagementAndCopy(false)
+        }
+    }
+
+    private fun launchVideoTrim() {
+        val medium = getSelectedItems().firstOrNull() ?: return
+        if (!medium.isVideo()) return
+        val intent = Intent(activity, org.fossify.gallery.activities.VideoTrimActivity::class.java).apply {
+            putExtra(org.fossify.gallery.helpers.PATH, medium.path)
+        }
+        activity.startActivity(intent)
+        finishActMode()
+    }
+
+    private fun tryMoveToVault() {
+        val storedHash = config.vaultProtectionHash
+        if (storedHash.isEmpty()) {
+            SecurityDialog(activity, "", SHOW_ALL_TABS) { hash, type, success ->
+                if (success) {
+                    config.vaultProtectionHash = hash
+                    config.vaultProtectionType = type
+                    confirmMoveToVault()
+                }
+            }
+        } else {
+            SecurityDialog(activity, storedHash, config.vaultProtectionType) { _, _, success ->
+                if (success) confirmMoveToVault()
+            }
+        }
+    }
+
+    private fun confirmMoveToVault() {
+        val count = selectedKeys.size
+        val message = String.format(activity.getString(R.string.vault_move_confirm), count)
+        ConfirmationDialog(activity, message) {
+            performMoveToVault()
+        }
+    }
+
+    private fun performMoveToVault() {
+        val selectedItems = getSelectedItems()
+        if (selectedItems.isEmpty()) return
+
+        ensureBackgroundThread {
+            val movedFileDirItems = ArrayList<FileDirItem>()
+            val movedMedia = ArrayList<Medium>()
+
+            selectedItems.forEach { medium ->
+                val encryptedName = VaultCrypto.encryptFromPath(activity.applicationContext, medium.path)
+                if (encryptedName != null) {
+                    val mime = android.webkit.MimeTypeMap.getSingleton()
+                        .getMimeTypeFromExtension(medium.name.substringAfterLast('.', "").lowercase())
+                        ?: if (medium.isVideo()) "video/*" else "image/*"
+                    val thumbnailName = VaultCrypto.generateAndEncryptThumbnail(
+                        activity.applicationContext, medium.path, mime
+                    ) ?: ""
+                    val item = VaultItem(
+                        id = null,
+                        encryptedFilename = encryptedName,
+                        originalFilename = medium.name,
+                        mimeType = mime,
+                        originalSizeBytes = medium.size,
+                        dateAdded = System.currentTimeMillis(),
+                        thumbnailFilename = thumbnailName,
+                    )
+                    try {
+                        activity.applicationContext.vaultItemDB.insert(item)
+                        movedFileDirItems.add(medium.toFileDirItem())
+                        movedMedia.add(medium)
+                    } catch (_: Exception) {
+                        VaultCrypto.deleteEncrypted(activity.applicationContext, encryptedName)
+                        if (thumbnailName.isNotEmpty()) {
+                            VaultCrypto.deleteEncrypted(activity.applicationContext, thumbnailName)
+                        }
+                    }
+                }
+            }
+
+            activity.runOnUiThread {
+                if (movedFileDirItems.isEmpty()) {
+                    activity.toast(R.string.vault_decrypt_failed)
+                    return@runOnUiThread
+                }
+                activity.toast(
+                    String.format(activity.getString(R.string.vault_move_done), movedFileDirItems.size)
+                )
+                media.removeAll(movedMedia)
+                listener?.tryDeleteFiles(movedFileDirItems, true)
+                listener?.updateMediaGridDecoration(media)
+                notifyDataSetChanged()
+                finishActMode()
+            }
         }
     }
 

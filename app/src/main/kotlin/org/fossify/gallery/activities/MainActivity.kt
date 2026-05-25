@@ -506,6 +506,7 @@ class MainActivity : SimpleActivity(), DirectoryOperationsListener {
                 R.id.stop_showing_excluded -> tryToggleTemporarilyShowExcluded()
                 R.id.create_new_folder -> createNewFolder()
                 R.id.open_recycle_bin -> openRecycleBin()
+                R.id.open_vault -> tryOpenVault()
                 R.id.column_count -> changeColumnCount()
                 R.id.set_as_default_folder -> setAsDefaultFolder()
                 R.id.more_apps_from_us -> launchMoreAppsFromUsIntent()
@@ -519,6 +520,27 @@ class MainActivity : SimpleActivity(), DirectoryOperationsListener {
 
     private fun updateMenuColors() {
         binding.mainMenu.updateColors()
+    }
+
+    private fun tryOpenVault() {
+        val storedHash = config.vaultProtectionHash
+        if (storedHash.isEmpty()) {
+            org.fossify.commons.dialogs.SecurityDialog(this, "", org.fossify.commons.helpers.SHOW_ALL_TABS) { hash, type, success ->
+                if (success) {
+                    config.vaultProtectionHash = hash
+                    config.vaultProtectionType = type
+                    launchVault()
+                }
+            }
+        } else {
+            org.fossify.commons.dialogs.SecurityDialog(this, storedHash, config.vaultProtectionType) { _, _, success ->
+                if (success) launchVault()
+            }
+        }
+    }
+
+    private fun launchVault() {
+        startActivity(android.content.Intent(this, VaultActivity::class.java))
     }
 
     private fun getRecyclerAdapter() = binding.directoriesGrid.adapter as? DirectoryAdapter
