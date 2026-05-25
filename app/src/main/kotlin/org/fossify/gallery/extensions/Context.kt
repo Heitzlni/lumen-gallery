@@ -106,6 +106,7 @@ import org.fossify.gallery.helpers.TYPE_VIDEOS
 import org.fossify.gallery.interfaces.DateTakensDao
 import org.fossify.gallery.interfaces.DirectoryDao
 import org.fossify.gallery.interfaces.FavoritesDao
+import org.fossify.gallery.interfaces.ImageLabelDao
 import org.fossify.gallery.interfaces.MediumDao
 import org.fossify.gallery.interfaces.VaultItemDao
 import org.fossify.gallery.interfaces.WidgetsDao
@@ -148,6 +149,9 @@ val Context.dateTakensDB: DateTakensDao
 
 val Context.vaultItemDB: VaultItemDao
     get() = GalleryDatabase.getInstance(applicationContext).VaultItemDao()
+
+val Context.imageLabelDB: ImageLabelDao
+    get() = GalleryDatabase.getInstance(applicationContext).ImageLabelDao()
 
 val Context.recycleBin: File get() = filesDir
 

@@ -97,7 +97,22 @@ class SearchActivity : SimpleActivity(), MediaOperationsListener {
     private fun textChanged(text: String) {
         ensureBackgroundThread {
             try {
-                val filtered = mAllMedia.filter { it is Medium && it.name.contains(text, true) } as ArrayList
+                // Filename match (cheap) + label match (ML Kit). Label paths
+                // come back lower-cased exact-match style, so we LIKE %text%.
+                val labelPaths: Set<String> = if (text.isNotBlank()) {
+                    try {
+                        applicationContext.imageLabelDB
+                            .pathsMatching("%${text.lowercase()}%")
+                            .toHashSet()
+                    } catch (_: Exception) {
+                        emptySet()
+                    }
+                } else {
+                    emptySet()
+                }
+                val filtered = mAllMedia.filter {
+                    it is Medium && (it.name.contains(text, true) || labelPaths.contains(it.path))
+                } as ArrayList
                 filtered.sortBy { it is Medium && !it.name.startsWith(text, true) }
                 val grouped = MediaFetcher(applicationContext).groupMedia(filtered as ArrayList<Medium>, "")
                 runOnUiThread {

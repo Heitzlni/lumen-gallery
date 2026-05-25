@@ -60,6 +60,7 @@ class SettingsActivity : SimpleActivity() {
         setupManageIncludedFolders()
         setupManageExcludedFolders()
         setupOpenVault()
+        setupIndexPhotos()
         setupManageHiddenFolders()
         setupSearchAllFiles()
         setupShowHiddenItems()
@@ -222,6 +223,46 @@ class SettingsActivity : SimpleActivity() {
         binding.settingsManageExcludedFoldersHolder.setOnClickListener {
             handleExcludedFolderPasswordProtection {
                 startActivity(Intent(this, ExcludedFoldersActivity::class.java))
+            }
+        }
+    }
+
+    private fun setupIndexPhotos() {
+        refreshIndexStatus()
+        binding.settingsIndexPhotosHolder.setOnClickListener {
+            if (org.fossify.gallery.helpers.ImageIndexer.isRunning) {
+                org.fossify.gallery.helpers.ImageIndexer.cancel()
+                toast(R.string.photo_content_search_cancelling)
+                return@setOnClickListener
+            }
+            toast(R.string.photo_content_search_started)
+            org.fossify.gallery.helpers.ImageIndexer.indexAll(
+                applicationContext,
+                onProgress = { current, total ->
+                    runOnUiThread {
+                        binding.settingsIndexPhotosStatus.text =
+                            getString(R.string.photo_content_search_progress, current, total)
+                    }
+                },
+                onDone = { count, cancelled ->
+                    runOnUiThread {
+                        toast(
+                            if (cancelled) getString(R.string.photo_content_search_cancelled, count)
+                            else getString(R.string.photo_content_search_done, count)
+                        )
+                        refreshIndexStatus()
+                    }
+                },
+            )
+        }
+    }
+
+    private fun refreshIndexStatus() {
+        org.fossify.commons.helpers.ensureBackgroundThread {
+            val indexed = applicationContext.imageLabelDB.indexedPathCount()
+            runOnUiThread {
+                binding.settingsIndexPhotosStatus.text =
+                    getString(R.string.photo_content_search_indexed_count, indexed)
             }
         }
     }

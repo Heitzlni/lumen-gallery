@@ -343,6 +343,14 @@
     <string name="move_album_to_vault">Move album to vault</string>
     <string name="move_album_to_vault_confirm">Move all photos and videos from %1$d album(s) into the vault? Originals will be deleted.</string>
     <string name="move_album_to_vault_done">Moved %1$d items from %2$d album(s) into the vault.</string>
+    <!-- Photo content search (on-device ML labels) -->
+    <string name="photo_content_search_index_now">Index photos for content search</string>
+    <string name="photo_content_search_indexed_count">%1$d photos indexed</string>
+    <string name="photo_content_search_progress">Indexing: %1$d / %2$d</string>
+    <string name="photo_content_search_started">Indexing started in background…</string>
+    <string name="photo_content_search_done">Indexed %1$d new photos.</string>
+    <string name="photo_content_search_cancelled">Indexing cancelled (%1$d done).</string>
+    <string name="photo_content_search_cancelling">Cancelling indexing…</string>
     <plurals name="vault_restore_confirm">
         <item quantity="one">Restore %d item back to your gallery and remove it from the vault?</item>
         <item quantity="other">Restore %d items back to your gallery and remove them from the vault?</item>

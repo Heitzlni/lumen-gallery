@@ -9,7 +9,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 import org.fossify.gallery.interfaces.*
 import org.fossify.gallery.models.*
 
-@Database(entities = [Directory::class, Medium::class, Widget::class, DateTaken::class, Favorite::class, VaultItem::class], version = 14)
+@Database(entities = [Directory::class, Medium::class, Widget::class, DateTaken::class, Favorite::class, VaultItem::class, ImageLabel::class], version = 15)
 abstract class GalleryDatabase : RoomDatabase() {
 
     abstract fun DirectoryDao(): DirectoryDao
@@ -23,6 +23,8 @@ abstract class GalleryDatabase : RoomDatabase() {
     abstract fun FavoritesDao(): FavoritesDao
 
     abstract fun VaultItemDao(): VaultItemDao
+
+    abstract fun ImageLabelDao(): ImageLabelDao
 
     companion object {
         private var db: GalleryDatabase? = null
@@ -43,6 +45,7 @@ abstract class GalleryDatabase : RoomDatabase() {
                             .addMigrations(MIGRATION_11_12)
                             .addMigrations(MIGRATION_12_13)
                             .addMigrations(MIGRATION_13_14)
+                            .addMigrations(MIGRATION_14_15)
                             .build()
                     }
                 }
@@ -121,6 +124,21 @@ abstract class GalleryDatabase : RoomDatabase() {
         private val MIGRATION_13_14 = object : Migration(13, 14) {
             override fun migrate(database: SupportSQLiteDatabase) {
                 database.execSQL("ALTER TABLE vault_items ADD COLUMN vault_album_name TEXT NOT NULL DEFAULT ''")
+            }
+        }
+
+        private val MIGRATION_14_15 = object : Migration(14, 15) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `image_labels` (" +
+                        "`id` INTEGER PRIMARY KEY AUTOINCREMENT, " +
+                        "`media_path` TEXT NOT NULL, " +
+                        "`label` TEXT NOT NULL, " +
+                        "`confidence` REAL NOT NULL, " +
+                        "`indexed_at` INTEGER NOT NULL)"
+                )
+                database.execSQL("CREATE INDEX `index_image_labels_media_path` ON `image_labels` (`media_path`)")
+                database.execSQL("CREATE INDEX `index_image_labels_label` ON `image_labels` (`label`)")
             }
         }
     }
