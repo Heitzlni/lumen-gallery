@@ -478,6 +478,7 @@ class MediaAdapter(
     private fun tryMoveToVault() {
         val storedHash = config.vaultProtectionHash
         if (storedHash.isEmpty()) {
+            // First time: set up a vault password. Adding is then free.
             SecurityDialog(activity, "", SHOW_ALL_TABS) { hash, type, success ->
                 if (success) {
                     config.vaultProtectionHash = hash
@@ -486,9 +487,9 @@ class MediaAdapter(
                 }
             }
         } else {
-            SecurityDialog(activity, storedHash, config.vaultProtectionType) { _, _, success ->
-                if (success) confirmMoveToVault()
-            }
+            // Already set up — go straight to the confirmation. PIN is only
+            // required to OPEN the vault, not to add to it.
+            confirmMoveToVault()
         }
     }
 

@@ -331,6 +331,13 @@
         <item quantity="one">Permanently delete %d item from the vault?</item>
         <item quantity="other">Permanently delete %d items from the vault?</item>
     </plurals>
+    <string name="vault_restore_to_gallery">Restore to gallery</string>
+    <string name="vault_restore_done">Restored %1$d item(s) to the gallery.</string>
+    <string name="vault_restore_failed">Could not restore any items.</string>
+    <plurals name="vault_restore_confirm">
+        <item quantity="one">Restore %d item back to your gallery and remove it from the vault?</item>
+        <item quantity="other">Restore %d items back to your gallery and remove them from the vault?</item>
+    </plurals>
     <!--
         Haven't found some strings? There's more at
         https://github.com/FossifyOrg/Commons/tree/master/commons/src/main/res

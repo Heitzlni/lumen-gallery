@@ -1,6 +1,7 @@
 package org.fossify.gallery.adapters
 
 import android.view.Menu
+import android.view.View
 import android.view.ViewGroup
 import com.bumptech.glide.Glide
 import org.fossify.commons.activities.BaseSimpleActivity
@@ -13,17 +14,25 @@ import org.fossify.commons.helpers.ensureBackgroundThread
 import org.fossify.commons.views.MyRecyclerView
 import org.fossify.gallery.R
 import org.fossify.gallery.databinding.ItemVaultBinding
+import org.fossify.gallery.databinding.ItemVaultHeaderBinding
 import org.fossify.gallery.helpers.VaultCrypto
 import org.fossify.gallery.models.VaultItem
+import org.fossify.gallery.models.VaultListItem
 
 class VaultAdapter(
     activity: BaseSimpleActivity,
-    var items: ArrayList<VaultItem>,
+    var rows: ArrayList<VaultListItem>,
     recyclerView: MyRecyclerView,
     val onActionDelete: (ArrayList<VaultItem>) -> Unit,
     val onActionExport: (ArrayList<VaultItem>) -> Unit,
+    val onActionRestore: (ArrayList<VaultItem>) -> Unit,
     itemClick: (Any) -> Unit,
 ) : MyRecyclerViewAdapter(activity, recyclerView, itemClick) {
+
+    companion object {
+        private const val VIEW_TYPE_HEADER = 0
+        private const val VIEW_TYPE_ENTRY = 1
+    }
 
     init {
         setupDragListener(true)
@@ -47,77 +56,119 @@ class VaultAdapter(
                 finishActMode()
             }
 
+            R.id.cab_vault_restore -> {
+                onActionRestore(getSelectedItems())
+                finishActMode()
+            }
+
             R.id.cab_vault_select_all -> selectAll()
         }
     }
 
-    override fun getSelectableItemCount() = items.size
+    override fun getItemViewType(position: Int): Int = when (rows[position]) {
+        is VaultListItem.Header -> VIEW_TYPE_HEADER
+        is VaultListItem.Entry -> VIEW_TYPE_ENTRY
+    }
 
-    override fun getIsItemSelectable(position: Int) = true
+    override fun getSelectableItemCount() = rows.count { it is VaultListItem.Entry }
 
-    override fun getItemSelectionKey(position: Int) = items.getOrNull(position)?.id?.toInt()
+    override fun getIsItemSelectable(position: Int) = rows[position] is VaultListItem.Entry
 
-    override fun getItemKeyPosition(key: Int) = items.indexOfFirst { it.id?.toInt() == key }
+    override fun getItemSelectionKey(position: Int): Int? {
+        val row = rows.getOrNull(position) ?: return null
+        return if (row is VaultListItem.Entry) row.item.id?.toInt() else null
+    }
+
+    override fun getItemKeyPosition(key: Int) = rows.indexOfFirst {
+        it is VaultListItem.Entry && it.item.id?.toInt() == key
+    }
 
     override fun onActionModeCreated() {}
 
     override fun onActionModeDestroyed() {}
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
-        return createViewHolder(ItemVaultBinding.inflate(layoutInflater, parent, false).root)
+        return if (viewType == VIEW_TYPE_HEADER) {
+            createViewHolder(ItemVaultHeaderBinding.inflate(layoutInflater, parent, false).root)
+        } else {
+            createViewHolder(ItemVaultBinding.inflate(layoutInflater, parent, false).root)
+        }
     }
 
     override fun onBindViewHolder(holder: ViewHolder, position: Int) {
-        val item = items[position]
-        holder.bindView(item, true, true) { itemView, _ ->
-            ItemVaultBinding.bind(itemView).apply {
-                root.setupViewBackground(activity)
-                vaultItemHolder.isSelected = item.id?.toInt()?.let { selectedKeys.contains(it) } == true
-                vaultItemTitle.apply {
-                    text = item.originalFilename
-                    setTextColor(context.getProperTextColor())
+        val row = rows[position]
+        when (row) {
+            is VaultListItem.Header -> {
+                val view = holder.itemView
+                ItemVaultHeaderBinding.bind(view).apply {
+                    vaultHeaderLabel.text = row.title
+                    vaultHeaderLabel.setTextColor(activity.getProperTextColor())
                 }
-                val sizePart = item.originalSizeBytes.formatSize()
-                val datePart = item.dateAdded.formatDate(activity)
-                vaultItemSubtitle.apply {
-                    text = "$sizePart · $datePart"
-                    setTextColor(context.getProperTextColor())
-                }
+                // Headers aren't selectable; don't run bindView's selection wiring.
+            }
 
-                vaultItemThumb.setImageDrawable(null)
-                if (item.thumbnailFilename.isNotEmpty()) {
-                    val expectedFilename = item.thumbnailFilename
-                    vaultItemThumb.tag = expectedFilename
-                    ensureBackgroundThread {
-                        val file = VaultCrypto.decryptThumbnailToCache(
-                            activity.applicationContext, expectedFilename
-                        ) ?: return@ensureBackgroundThread
-                        activity.runOnUiThread {
-                            // Guard against view recycling — only set if the
-                            // holder is still bound to this item.
-                            if (vaultItemThumb.tag == expectedFilename && !activity.isDestroyed) {
-                                Glide.with(activity)
-                                    .load(file)
-                                    .centerCrop()
-                                    .into(vaultItemThumb)
-                            }
+            is VaultListItem.Entry -> {
+                val item = row.item
+                holder.bindView(item, true, true) { itemView, _ ->
+                    bindEntryRow(itemView, item)
+                }
+                bindViewHolder(holder)
+            }
+        }
+    }
+
+    private fun bindEntryRow(itemView: View, item: VaultItem) {
+        ItemVaultBinding.bind(itemView).apply {
+            root.setupViewBackground(activity)
+            vaultItemHolder.isSelected =
+                item.id?.toInt()?.let { selectedKeys.contains(it) } == true
+            vaultItemTitle.apply {
+                text = item.originalFilename
+                setTextColor(context.getProperTextColor())
+            }
+            val sizePart = item.originalSizeBytes.formatSize()
+            val datePart = item.dateAdded.formatDate(activity)
+            vaultItemSubtitle.apply {
+                text = "$sizePart · $datePart"
+                setTextColor(context.getProperTextColor())
+            }
+
+            vaultItemThumb.setImageDrawable(null)
+            if (item.thumbnailFilename.isNotEmpty()) {
+                val expectedFilename = item.thumbnailFilename
+                vaultItemThumb.tag = expectedFilename
+                ensureBackgroundThread {
+                    val file = VaultCrypto.decryptThumbnailToCache(
+                        activity.applicationContext, expectedFilename
+                    ) ?: return@ensureBackgroundThread
+                    activity.runOnUiThread {
+                        if (vaultItemThumb.tag == expectedFilename && !activity.isDestroyed) {
+                            Glide.with(activity)
+                                .load(file)
+                                .centerCrop()
+                                .into(vaultItemThumb)
                         }
                     }
                 }
             }
         }
-        bindViewHolder(holder)
     }
 
-    override fun getItemCount() = items.size
+    override fun getItemCount() = rows.size
 
-    fun updateItems(newItems: ArrayList<VaultItem>) {
-        items = newItems
+    fun updateRows(newRows: ArrayList<VaultListItem>) {
+        rows = newRows
         notifyDataSetChanged()
         finishActMode()
     }
 
     private fun getSelectedItems(): ArrayList<VaultItem> {
-        return items.filter { selectedKeys.contains(it.id?.toInt()) } as ArrayList<VaultItem>
+        val out = ArrayList<VaultItem>()
+        rows.forEach {
+            if (it is VaultListItem.Entry && selectedKeys.contains(it.item.id?.toInt())) {
+                out.add(it.item)
+            }
+        }
+        return out
     }
 }
