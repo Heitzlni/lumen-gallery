@@ -13,6 +13,7 @@ androidx-swiperefreshlayout = "1.2.0"
 androidx-constraintlayout = "2.2.1"
 androidx-documentfile = "1.1.0"
 androidx-security-crypto = "1.1.0-alpha06"
+mlkit-image-labeling = "17.0.9"
 #exif
 exif = "1.0.1"
 #Room
@@ -54,6 +55,7 @@ androidx-constraintlayout = { module = "androidx.constraintlayout:constraintlayo
 androidx-print = { module = "androidx.print:print", version.ref = "androidx-print" }
 androidx-documentfile = { module = "androidx.documentfile:documentfile", version.ref = "androidx-documentfile" }
 androidx-security-crypto = { module = "androidx.security:security-crypto", version.ref = "androidx-security-crypto" }
+mlkit-image-labeling = { module = "com.google.mlkit:image-labeling", version.ref = "mlkit-image-labeling" }
 #exif
 exif = { module = "it.sephiroth.android.exif:library", version.ref = "exif" }
 #Room
