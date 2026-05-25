@@ -199,6 +199,13 @@
             android:configChanges="orientation"
             android:exported="false"
             android:label="@string/vault"
+            android:parentActivityName=".activities.VaultAlbumsActivity" />
+
+        <activity
+            android:name=".activities.VaultAlbumsActivity"
+            android:configChanges="orientation"
+            android:exported="false"
+            android:label="@string/vault"
             android:parentActivityName=".activities.MainActivity" />
 
         <activity

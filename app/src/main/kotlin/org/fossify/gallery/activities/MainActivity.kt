@@ -540,7 +540,7 @@ class MainActivity : SimpleActivity(), DirectoryOperationsListener {
     }
 
     private fun launchVault() {
-        startActivity(android.content.Intent(this, VaultActivity::class.java))
+        startActivity(android.content.Intent(this, VaultAlbumsActivity::class.java))
     }
 
     private fun getRecyclerAdapter() = binding.directoriesGrid.adapter as? DirectoryAdapter

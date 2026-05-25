@@ -334,6 +334,12 @@
     <string name="vault_restore_to_gallery">Restore to gallery</string>
     <string name="vault_restore_done">Restored %1$d item(s) to the gallery.</string>
     <string name="vault_restore_failed">Could not restore any items.</string>
+    <!-- Vault albums -->
+    <string name="vault_pick_album_title">Move to which vault album?</string>
+    <string name="vault_default_album">Default</string>
+    <string name="vault_new_album">New album…</string>
+    <string name="vault_new_album_hint">Album name</string>
+    <string name="vault_show_all_media">Show all vault media</string>
     <plurals name="vault_restore_confirm">
         <item quantity="one">Restore %d item back to your gallery and remove it from the vault?</item>
         <item quantity="other">Restore %d items back to your gallery and remove them from the vault?</item>

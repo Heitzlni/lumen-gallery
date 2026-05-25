@@ -9,7 +9,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 import org.fossify.gallery.interfaces.*
 import org.fossify.gallery.models.*
 
-@Database(entities = [Directory::class, Medium::class, Widget::class, DateTaken::class, Favorite::class, VaultItem::class], version = 13)
+@Database(entities = [Directory::class, Medium::class, Widget::class, DateTaken::class, Favorite::class, VaultItem::class], version = 14)
 abstract class GalleryDatabase : RoomDatabase() {
 
     abstract fun DirectoryDao(): DirectoryDao
@@ -42,6 +42,7 @@ abstract class GalleryDatabase : RoomDatabase() {
                             .addMigrations(MIGRATION_10_11)
                             .addMigrations(MIGRATION_11_12)
                             .addMigrations(MIGRATION_12_13)
+                            .addMigrations(MIGRATION_13_14)
                             .build()
                     }
                 }
@@ -114,6 +115,12 @@ abstract class GalleryDatabase : RoomDatabase() {
             override fun migrate(database: SupportSQLiteDatabase) {
                 database.execSQL("ALTER TABLE vault_items ADD COLUMN original_folder_path TEXT NOT NULL DEFAULT ''")
                 database.execSQL("ALTER TABLE vault_items ADD COLUMN date_taken INTEGER NOT NULL DEFAULT 0")
+            }
+        }
+
+        private val MIGRATION_13_14 = object : Migration(13, 14) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL("ALTER TABLE vault_items ADD COLUMN vault_album_name TEXT NOT NULL DEFAULT ''")
             }
         }
     }

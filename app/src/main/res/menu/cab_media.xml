@@ -58,6 +58,11 @@
         android:title="@string/unhide"
         app:showAsAction="ifRoom" />
     <item
+        android:id="@+id/cab_move_to_vault"
+        android:showAsAction="never"
+        android:title="@string/move_to_vault"
+        app:showAsAction="never" />
+    <item
         android:id="@+id/cab_copy_to"
         android:showAsAction="never"
         android:title="@string/copy_to"
@@ -66,11 +71,6 @@
         android:id="@+id/cab_move_to"
         android:showAsAction="never"
         android:title="@string/move_to"
-        app:showAsAction="never" />
-    <item
-        android:id="@+id/cab_move_to_vault"
-        android:showAsAction="never"
-        android:title="@string/move_to_vault"
         app:showAsAction="never" />
     <item
         android:id="@+id/cab_create_shortcut"
