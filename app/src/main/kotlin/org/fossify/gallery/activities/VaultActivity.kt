@@ -244,7 +244,12 @@ class VaultActivity : SimpleActivity() {
                 put(MediaStore.MediaColumns.IS_PENDING, 1)
             }
             if (item.dateTaken > 0L) {
+                // DATE_TAKEN is in milliseconds, DATE_MODIFIED/ADDED in seconds.
+                // Setting all three so gallery apps that prefer one over another
+                // still place the photo at its real date.
                 put(MediaStore.MediaColumns.DATE_TAKEN, item.dateTaken)
+                put(MediaStore.MediaColumns.DATE_MODIFIED, item.dateTaken / 1000L)
+                put(MediaStore.MediaColumns.DATE_ADDED, item.dateTaken / 1000L)
             }
         }
 
@@ -262,6 +267,24 @@ class VaultActivity : SimpleActivity() {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 val finalValues = ContentValues().apply { put(MediaStore.MediaColumns.IS_PENDING, 0) }
                 resolver.update(uri, finalValues, null, null)
+            }
+            // Force the file's filesystem mtime to the original date — some
+            // gallery apps display the file's last-modified time rather than
+            // MediaStore's DATE_TAKEN.
+            if (item.dateTaken > 0L) {
+                try {
+                    val proj = arrayOf(MediaStore.MediaColumns.DATA)
+                    resolver.query(uri, proj, null, null, null)?.use { c ->
+                        if (c.moveToFirst()) {
+                            val path = c.getString(0)
+                            if (!path.isNullOrEmpty()) {
+                                java.io.File(path).setLastModified(item.dateTaken)
+                            }
+                        }
+                    }
+                } catch (_: Exception) {
+                    // best-effort
+                }
             }
             true
         } catch (e: Exception) {
