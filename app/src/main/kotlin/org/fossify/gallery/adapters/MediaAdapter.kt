@@ -518,6 +518,13 @@ class MediaAdapter(
                     val thumbnailName = VaultCrypto.generateAndEncryptThumbnail(
                         activity.applicationContext, medium.path, mime
                     ) ?: ""
+                    // Prefer EXIF/MediaStore "date taken" — fall back to last-
+                    // modified, then to "now" so sorting always has a value.
+                    val takenOrModified = when {
+                        medium.taken > 0L -> medium.taken
+                        medium.modified > 0L -> medium.modified
+                        else -> System.currentTimeMillis()
+                    }
                     val item = VaultItem(
                         id = null,
                         encryptedFilename = encryptedName,
@@ -526,6 +533,8 @@ class MediaAdapter(
                         originalSizeBytes = medium.size,
                         dateAdded = System.currentTimeMillis(),
                         thumbnailFilename = thumbnailName,
+                        originalFolderPath = medium.parentPath,
+                        dateTaken = takenOrModified,
                     )
                     try {
                         activity.applicationContext.vaultItemDB.insert(item)

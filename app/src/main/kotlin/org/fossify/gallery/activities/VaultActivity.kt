@@ -5,6 +5,7 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.Environment
 import android.provider.MediaStore
 import androidx.core.content.FileProvider
 import org.fossify.commons.dialogs.ConfirmationDialog
@@ -122,8 +123,10 @@ class VaultActivity : SimpleActivity() {
         var lastBucket: String? = null
         val cal = Calendar.getInstance()
         items.forEach { item ->
-            cal.time = Date(item.dateAdded)
-            // Bucket by year+month; format only when the bucket changes.
+            // Group by the date the photo was actually taken; if we don't
+            // have that (item added pre-v3.1), fall back to date_added.
+            val effectiveTimestamp = if (item.dateTaken > 0L) item.dateTaken else item.dateAdded
+            cal.time = Date(effectiveTimestamp)
             val bucketKey = "${cal.get(Calendar.YEAR)}-${cal.get(Calendar.MONTH)}"
             if (bucketKey != lastBucket) {
                 lastBucket = bucketKey
@@ -218,7 +221,12 @@ class VaultActivity : SimpleActivity() {
 
         val mime = item.mimeType.ifEmpty { "image/*" }
         val isVideo = mime.startsWith("video/")
-        val relativePath = if (isVideo) "Movies/FossifyGallery" else "Pictures/FossifyGallery"
+        // Try to restore to the photo's original folder. If that folder
+        // lived outside primary external storage (e.g. SD card) or we
+        // don't have a remembered path (older vault items), fall into
+        // the default Pictures/FossifyGallery bucket.
+        val relativePath = resolveRelativePath(item.originalFolderPath)
+            ?: if (isVideo) "Movies/FossifyGallery" else "Pictures/FossifyGallery"
         val collection = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             if (isVideo) MediaStore.Video.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
             else MediaStore.Images.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
@@ -234,6 +242,9 @@ class VaultActivity : SimpleActivity() {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 put(MediaStore.MediaColumns.RELATIVE_PATH, relativePath)
                 put(MediaStore.MediaColumns.IS_PENDING, 1)
+            }
+            if (item.dateTaken > 0L) {
+                put(MediaStore.MediaColumns.DATE_TAKEN, item.dateTaken)
             }
         }
 
@@ -256,6 +267,20 @@ class VaultActivity : SimpleActivity() {
         } catch (e: Exception) {
             try { resolver.delete(uri, null, null) } catch (_: Exception) {}
             false
+        }
+    }
+
+    private fun resolveRelativePath(absoluteFolderPath: String): String? {
+        if (absoluteFolderPath.isEmpty()) return null
+        val external = Environment.getExternalStorageDirectory().absolutePath
+        // Trim a trailing slash off both so the equals check works at the root.
+        val cleanedSource = absoluteFolderPath.trimEnd('/')
+        val cleanedExternal = external.trimEnd('/')
+        return when {
+            cleanedSource == cleanedExternal -> ""
+            cleanedSource.startsWith("$cleanedExternal/") ->
+                cleanedSource.substring(cleanedExternal.length + 1)
+            else -> null // SD card / OTG / unrecognized — caller falls back
         }
     }
 

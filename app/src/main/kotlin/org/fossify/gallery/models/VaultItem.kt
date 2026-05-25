@@ -14,4 +14,6 @@ data class VaultItem(
     @ColumnInfo(name = "original_size_bytes") var originalSizeBytes: Long,
     @ColumnInfo(name = "date_added") var dateAdded: Long,
     @ColumnInfo(name = "thumbnail_filename", defaultValue = "") var thumbnailFilename: String = "",
+    @ColumnInfo(name = "original_folder_path", defaultValue = "") var originalFolderPath: String = "",
+    @ColumnInfo(name = "date_taken", defaultValue = "0") var dateTaken: Long = 0L,
 )

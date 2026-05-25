@@ -8,7 +8,10 @@ import org.fossify.gallery.models.VaultItem
 
 @Dao
 interface VaultItemDao {
-    @Query("SELECT * FROM vault_items ORDER BY date_added DESC")
+    // Sort by date_taken when known (we record EXIF/MediaStore "taken"
+    // since v13), falling back to date_added for items moved into the
+    // vault by older builds.
+    @Query("SELECT * FROM vault_items ORDER BY CASE WHEN date_taken > 0 THEN date_taken ELSE date_added END DESC")
     fun getAll(): List<VaultItem>
 
     @Query("SELECT * FROM vault_items WHERE id = :id")
