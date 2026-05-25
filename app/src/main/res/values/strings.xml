@@ -340,6 +340,9 @@
     <string name="vault_new_album">New album…</string>
     <string name="vault_new_album_hint">Album name</string>
     <string name="vault_show_all_media">Show all vault media</string>
+    <string name="move_album_to_vault">Move album to vault</string>
+    <string name="move_album_to_vault_confirm">Move all photos and videos from %1$d album(s) into the vault? Originals will be deleted.</string>
+    <string name="move_album_to_vault_done">Moved %1$d items from %2$d album(s) into the vault.</string>
     <plurals name="vault_restore_confirm">
         <item quantity="one">Restore %d item back to your gallery and remove it from the vault?</item>
         <item quantity="other">Restore %d items back to your gallery and remove them from the vault?</item>

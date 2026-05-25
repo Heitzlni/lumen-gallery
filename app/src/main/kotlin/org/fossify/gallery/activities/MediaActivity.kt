@@ -392,9 +392,33 @@ class MediaActivity : SimpleActivity(), MediaOperationsListener {
                 R.id.slideshow -> startSlideshow()
                 R.id.settings -> launchSettings()
                 R.id.about -> launchAbout()
+                R.id.open_vault -> tryOpenVault()
                 else -> return@setOnMenuItemClickListener false
             }
             return@setOnMenuItemClickListener true
+        }
+    }
+
+    private fun tryOpenVault() {
+        val storedHash = config.vaultProtectionHash
+        if (storedHash.isEmpty()) {
+            org.fossify.commons.dialogs.SecurityDialog(
+                this, "", org.fossify.commons.helpers.SHOW_ALL_TABS
+            ) { hash, type, success ->
+                if (success) {
+                    config.vaultProtectionHash = hash
+                    config.vaultProtectionType = type
+                    startActivity(android.content.Intent(this, VaultAlbumsActivity::class.java))
+                }
+            }
+        } else {
+            org.fossify.commons.dialogs.SecurityDialog(
+                this, storedHash, config.vaultProtectionType
+            ) { _, _, success ->
+                if (success) {
+                    startActivity(android.content.Intent(this, VaultAlbumsActivity::class.java))
+                }
+            }
         }
     }
 

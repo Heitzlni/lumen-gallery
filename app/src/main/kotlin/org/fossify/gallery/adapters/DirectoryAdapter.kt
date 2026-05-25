@@ -83,6 +83,7 @@ import org.fossify.gallery.extensions.getShortcutImage
 import org.fossify.gallery.extensions.isThisOrParentFolderHidden
 import org.fossify.gallery.extensions.loadImage
 import org.fossify.gallery.extensions.mediaDB
+import org.fossify.gallery.extensions.vaultItemDB
 import org.fossify.gallery.extensions.removeNoMedia
 import org.fossify.gallery.extensions.showRecycleBinEmptyingDialog
 import org.fossify.gallery.extensions.tryCopyMoveFilesTo
@@ -191,6 +192,9 @@ class DirectoryAdapter(
             findItem(R.id.cab_empty_recycle_bin).isVisible = isOneItemSelected && selectedPaths.first() == RECYCLE_BIN
             findItem(R.id.cab_empty_disable_recycle_bin).isVisible = isOneItemSelected && selectedPaths.first() == RECYCLE_BIN
 
+            findItem(R.id.cab_move_folder_to_vault).isVisible =
+                selectedPaths.none { it == RECYCLE_BIN || it == FAVORITES }
+
             findItem(R.id.cab_create_shortcut).isVisible = isOneItemSelected
 
             checkHideBtnVisibility(this, selectedPaths)
@@ -218,6 +222,7 @@ class DirectoryAdapter(
             R.id.cab_exclude -> tryExcludeFolder()
             R.id.cab_hide_from_all -> hideSelectedFromShowAll()
             R.id.cab_show_in_all -> showSelectedInShowAll()
+            R.id.cab_move_folder_to_vault -> confirmMoveFoldersToVault()
             R.id.cab_lock -> tryLockFolder()
             R.id.cab_unlock -> unlockFolder()
             R.id.cab_copy_to -> copyFilesTo()
@@ -503,6 +508,98 @@ class DirectoryAdapter(
             config.addExcludedFolders(paths)
             listener?.refreshItems()
             finishActMode()
+        }
+    }
+
+    private fun confirmMoveFoldersToVault() {
+        val selectedDirs = dirs.filter {
+            selectedKeys.contains(it.path.hashCode()) &&
+                it.path != RECYCLE_BIN &&
+                it.path != FAVORITES
+        }
+        if (selectedDirs.isEmpty()) return
+
+        val message = String.format(
+            activity.getString(R.string.move_album_to_vault_confirm),
+            selectedDirs.size
+        )
+        org.fossify.commons.dialogs.ConfirmationDialog(activity, message) {
+            performMoveFoldersToVault(selectedDirs)
+        }
+    }
+
+    private fun performMoveFoldersToVault(selectedDirs: List<org.fossify.gallery.models.Directory>) {
+        org.fossify.commons.helpers.ensureBackgroundThread {
+            val mediaDao = activity.applicationContext.mediaDB
+            val vaultDao = activity.applicationContext.vaultItemDB
+            var movedCount = 0
+            val foldersToDelete = ArrayList<java.io.File>()
+
+            selectedDirs.forEach { dir ->
+                val albumName = dir.name
+                val media = try {
+                    mediaDao.getMediaFromPath(dir.path)
+                } catch (_: Exception) {
+                    emptyList()
+                }
+
+                media.forEach { medium ->
+                    val encryptedName = org.fossify.gallery.helpers.VaultCrypto
+                        .encryptFromPath(activity.applicationContext, medium.path) ?: return@forEach
+
+                    val mime = android.webkit.MimeTypeMap.getSingleton()
+                        .getMimeTypeFromExtension(medium.name.substringAfterLast('.', "").lowercase())
+                        ?: if (medium.isVideo()) "video/*" else "image/*"
+                    val thumbnailName = org.fossify.gallery.helpers.VaultCrypto
+                        .generateAndEncryptThumbnail(activity.applicationContext, medium.path, mime) ?: ""
+
+                    val takenOrModified = when {
+                        medium.taken > 0L -> medium.taken
+                        medium.modified > 0L -> medium.modified
+                        else -> System.currentTimeMillis()
+                    }
+                    try {
+                        vaultDao.insert(
+                            org.fossify.gallery.models.VaultItem(
+                                id = null,
+                                encryptedFilename = encryptedName,
+                                originalFilename = medium.name,
+                                mimeType = mime,
+                                originalSizeBytes = medium.size,
+                                dateAdded = System.currentTimeMillis(),
+                                thumbnailFilename = thumbnailName,
+                                originalFolderPath = medium.parentPath,
+                                dateTaken = takenOrModified,
+                                vaultAlbumName = albumName,
+                            )
+                        )
+                        movedCount++
+                    } catch (_: Exception) {
+                        org.fossify.gallery.helpers.VaultCrypto.deleteEncrypted(
+                            activity.applicationContext, encryptedName
+                        )
+                        if (thumbnailName.isNotEmpty()) {
+                            org.fossify.gallery.helpers.VaultCrypto.deleteEncrypted(
+                                activity.applicationContext, thumbnailName
+                            )
+                        }
+                    }
+                }
+
+                foldersToDelete.add(java.io.File(dir.path))
+            }
+
+            activity.runOnUiThread {
+                activity.toast(
+                    String.format(
+                        activity.getString(R.string.move_album_to_vault_done),
+                        movedCount,
+                        selectedDirs.size
+                    )
+                )
+                listener?.deleteFolders(foldersToDelete)
+                finishActMode()
+            }
         }
     }
 
