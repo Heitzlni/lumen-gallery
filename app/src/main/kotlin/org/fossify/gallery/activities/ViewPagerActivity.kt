@@ -1536,14 +1536,23 @@ class ViewPagerActivity : BaseViewerActivity(), ViewPager.OnPageChangeListener, 
     // Auto-hide the toolbar + bottom actions a few seconds after revealing
     // them while a video is showing — same behaviour every native video
     // player has. Reset by any user-initiated re-show (which goes through
-    // fragmentClicked()).
+    // fragmentClicked()). Deferred while the user is actively scrubbing
+    // so the controls don't vanish mid-drag.
     private val mChromeAutoHideHandler = android.os.Handler(android.os.Looper.getMainLooper())
-    private val mChromeAutoHideRunnable = Runnable {
-        if (!mIsFullScreen && getCurrentMedium()?.isVideo() == true) {
-            fragmentClicked()
+    private val mChromeAutoHideRunnable = Runnable { tryAutoHideChrome() }
+    private val CHROME_AUTOHIDE_DELAY_MS = 7000L
+
+    private fun tryAutoHideChrome() {
+        if (mIsFullScreen) return
+        if (getCurrentMedium()?.isVideo() != true) return
+        val frag = getCurrentFragment() as? org.fossify.gallery.fragments.VideoFragment
+        if (frag?.isScrubbing() == true) {
+            // Still actively scrubbing — wait another full window.
+            scheduleChromeAutoHide()
+            return
         }
+        fragmentClicked()
     }
-    private val CHROME_AUTOHIDE_DELAY_MS = 5000L
 
     private fun scheduleChromeAutoHide() {
         mChromeAutoHideHandler.removeCallbacks(mChromeAutoHideRunnable)
