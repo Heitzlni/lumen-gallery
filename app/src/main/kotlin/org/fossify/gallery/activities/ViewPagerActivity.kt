@@ -256,6 +256,16 @@ class ViewPagerActivity : BaseViewerActivity(), ViewPager.OnPageChangeListener, 
 
         val filename = getCurrentMedium()?.name ?: mPath.getFilenameFromPath()
         binding.mediumViewerToolbar.title = filename
+
+        // After backgrounding with a paused video (Texture surface is
+        // re-attached on resume but ExoPlayer hasn't pushed a frame yet),
+        // the viewport renders black. Force the current fragment to
+        // re-emit its current frame. Slight delay so the surface is
+        // ready before we ask for a redraw.
+        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+            (getCurrentFragment() as? org.fossify.gallery.fragments.VideoFragment)
+                ?.redrawCurrentFrame()
+        }, 50L)
     }
 
     override fun onPause() {
