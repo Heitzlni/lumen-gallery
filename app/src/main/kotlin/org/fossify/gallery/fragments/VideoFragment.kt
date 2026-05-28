@@ -141,8 +141,8 @@ class VideoFragment : ViewPagerFragment(), TextureView.SurfaceTextureListener,
     // happens once when the user releases.
     // Thumbnails are persisted to disk (per video file path + size + mtime)
     // so a re-open of the same video is instant — matches Google Photos.
-    private val SCRUB_THUMB_COUNT = 32
-    private val SCRUB_THUMB_MAX_DIM = 200
+    private val SCRUB_THUMB_COUNT = 16
+    private val SCRUB_THUMB_MAX_DIM = 160
     @Volatile
     private var mScrubThumbnails: Array<android.graphics.Bitmap?>? = null
 
@@ -1200,6 +1200,9 @@ class VideoFragment : ViewPagerFragment(), TextureView.SurfaceTextureListener,
 
     /** Public accessor so the activity can gate PiP entry on actual playback. */
     fun isCurrentlyPlaying(): Boolean = mIsPlaying
+
+    /** Public accessor so the activity can defer auto-hide while scrubbing. */
+    fun isScrubbing(): Boolean = mIsDragged
 
     /**
      * When the activity is brought back to the foreground (e.g. user
