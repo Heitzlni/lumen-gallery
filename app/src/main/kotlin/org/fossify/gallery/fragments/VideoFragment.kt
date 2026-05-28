@@ -139,8 +139,10 @@ class VideoFragment : ViewPagerFragment(), TextureView.SurfaceTextureListener,
     // for smooth scrubbing we show the nearest cached frame from this
     // strip instead of waiting for the player to decode. The real seek
     // happens once when the user releases.
+    // Thumbnails are persisted to disk (per video file path + size + mtime)
+    // so a re-open of the same video is instant — matches Google Photos.
     private val SCRUB_THUMB_COUNT = 48
-    private val SCRUB_THUMB_MAX_DIM = 320
+    private val SCRUB_THUMB_MAX_DIM = 240
     @Volatile
     private var mScrubThumbnails: Array<android.graphics.Bitmap?>? = null
 
@@ -634,11 +636,17 @@ class VideoFragment : ViewPagerFragment(), TextureView.SurfaceTextureListener,
                 }
             }
 
-            override fun onRenderedFirstFrame() {
-                // After surface re-attach, ExoPlayer fires this once the
-                // real video frame hits the texture. Drop the thumbnail
-                // poster that's been holding the viewport.
-                hideScrubThumbnail()
+            override fun onIsPlayingChanged(isPlaying: Boolean) {
+                // The poster (a thumbnail from the scrub strip we drop in
+                // when the surface re-attaches on resume) stays up until
+                // the user actually starts playback. onRenderedFirstFrame
+                // would also fire but proved unreliable — ExoPlayer claims
+                // the frame was pushed but the surface stayed black on
+                // some setups. Waiting for real continuous playback is
+                // more robust.
+                if (isPlaying) {
+                    hideScrubThumbnail()
+                }
             }
 
             override fun onVideoSizeChanged(videoSize: VideoSize) {
@@ -994,6 +1002,20 @@ class VideoFragment : ViewPagerFragment(), TextureView.SurfaceTextureListener,
     private fun extractScrubThumbnails() {
         if (mDuration <= 0L) return
         if (mScrubThumbnails != null) return
+
+        val ctx = context ?: return
+        val cacheDir = File(ctx.cacheDir, "scrub_thumbs/${scrubCacheKeyForCurrentVideo()}")
+
+        // Disk cache hit — load and we're done. Instant on every re-open of
+        // the same video.
+        if (cacheDir.isDirectory) {
+            val loaded = loadScrubThumbnailsFromDisk(cacheDir)
+            if (loaded != null) {
+                mScrubThumbnails = loaded
+                return
+            }
+        }
+
         val thumbs = arrayOfNulls<android.graphics.Bitmap>(SCRUB_THUMB_COUNT)
         val retriever = android.media.MediaMetadataRetriever()
         try {
@@ -1002,18 +1024,14 @@ class VideoFragment : ViewPagerFragment(), TextureView.SurfaceTextureListener,
             for (i in 0 until SCRUB_THUMB_COUNT) {
                 if (!isAdded || activity?.isDestroyed == true) return
                 val timeUs = (durationUs * i) / SCRUB_THUMB_COUNT
-                // OPTION_CLOSEST_SYNC snaps to the nearest *keyframe* — on a
-                // short video that means several of our timestamps collapse
-                // to the same keyframe and the scrub preview looks frozen.
-                // OPTION_CLOSEST decodes intermediate frames between the
-                // previous keyframe and the target. Slower per frame, but it
-                // gives us 48 distinct frames instead of ~5.
+                // OPTION_CLOSEST decodes intermediate frames (slower per
+                // frame, but distinct). Falls back to OPTION_CLOSEST_SYNC
+                // for codecs that reject it.
                 val raw = try {
                     retriever.getFrameAtTime(timeUs, android.media.MediaMetadataRetriever.OPTION_CLOSEST)
                 } catch (_: Exception) {
                     null
                 } ?: try {
-                    // Fallback for codecs/devices where OPTION_CLOSEST throws.
                     retriever.getFrameAtTime(timeUs, android.media.MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
                 } catch (_: Exception) {
                     null
@@ -1025,9 +1043,64 @@ class VideoFragment : ViewPagerFragment(), TextureView.SurfaceTextureListener,
                 }
             }
             mScrubThumbnails = thumbs
+            // Persist to disk in the background so subsequent opens are
+            // instant. Best-effort — failures here don't hurt the runtime
+            // experience.
+            try {
+                saveScrubThumbnailsToDisk(cacheDir, thumbs)
+            } catch (_: Exception) {
+            }
         } catch (_: Exception) {
         } finally {
             try { retriever.release() } catch (_: Exception) {}
+        }
+    }
+
+    private fun scrubCacheKeyForCurrentVideo(): String {
+        val f = File(mMedium.path)
+        val raw = "${mMedium.path}|${f.length()}|${f.lastModified()}|v${SCRUB_THUMB_COUNT}d${SCRUB_THUMB_MAX_DIM}"
+        // Simple SHA1 hex — short enough for a path, doesn't expose the
+        // user's file path in the directory name.
+        return try {
+            val digest = java.security.MessageDigest.getInstance("SHA-1")
+            digest.update(raw.toByteArray())
+            digest.digest().joinToString("") { "%02x".format(it) }
+        } catch (_: Exception) {
+            raw.hashCode().toString()
+        }
+    }
+
+    private fun loadScrubThumbnailsFromDisk(dir: File): Array<android.graphics.Bitmap?>? {
+        return try {
+            val arr = arrayOfNulls<android.graphics.Bitmap>(SCRUB_THUMB_COUNT)
+            var loaded = 0
+            for (i in 0 until SCRUB_THUMB_COUNT) {
+                val file = File(dir, "$i.jpg")
+                if (file.exists()) {
+                    val bmp = android.graphics.BitmapFactory.decodeFile(file.absolutePath)
+                    if (bmp != null) {
+                        arr[i] = bmp
+                        loaded++
+                    }
+                }
+            }
+            if (loaded > 0) arr else null
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    private fun saveScrubThumbnailsToDisk(dir: File, thumbs: Array<android.graphics.Bitmap?>) {
+        if (!dir.exists() && !dir.mkdirs()) return
+        thumbs.forEachIndexed { i, bmp ->
+            if (bmp == null) return@forEachIndexed
+            try {
+                val out = File(dir, "$i.jpg")
+                java.io.FileOutputStream(out).use { fos ->
+                    bmp.compress(android.graphics.Bitmap.CompressFormat.JPEG, 80, fos)
+                }
+            } catch (_: Exception) {
+            }
         }
     }
 
