@@ -134,6 +134,16 @@ class VideoFragment : ViewPagerFragment(), TextureView.SurfaceTextureListener,
     private val mScrubFlushHandler = Handler(android.os.Looper.getMainLooper())
     private val mScrubFlushRunnable = Runnable { flushPendingScrub() }
 
+    // Pre-extracted thumbnails for instant scrub preview — ExoPlayer's
+    // real-time decode is hardware-limited (~5–20 fps for EXACT seek), so
+    // for smooth scrubbing we show the nearest cached frame from this
+    // strip instead of waiting for the player to decode. The real seek
+    // happens once when the user releases.
+    private val SCRUB_THUMB_COUNT = 48
+    private val SCRUB_THUMB_MAX_DIM = 320
+    @Volatile
+    private var mScrubThumbnails: Array<android.graphics.Bitmap?>? = null
+
     private var mStoredShowExtendedDetails = false
     private var mStoredHideExtendedDetails = false
     private var mStoredBottomActions = true
@@ -827,6 +837,10 @@ class VideoFragment : ViewPagerFragment(), TextureView.SurfaceTextureListener,
             if (mPendingScrubTarget >= 0L) mPendingScrubTarget else mSeekBar.progress.toLong()
         mPendingScrubTarget = -1L
         mExoPlayer!!.seekTo(finalTarget)
+        // Hide the thumbnail overlay only AFTER ExoPlayer has had a moment
+        // to decode the target frame — otherwise the overlay disappears
+        // and the user briefly sees the pre-seek (stale) video frame.
+        mScrubFlushHandler.postDelayed({ hideScrubThumbnail() }, 150L)
 
         if (mIsPlaying) {
             mExoPlayer!!.playWhenReady = true
@@ -937,31 +951,13 @@ class VideoFragment : ViewPagerFragment(), TextureView.SurfaceTextureListener,
         }
 
         if (mIsDragged) {
-            // Throttle scrub seeks. Removing the throttle entirely was a v5.4
-            // regression — flooding ExoPlayer with seekTo calls during a fine
-            // scrub ended up queueing them so the rendered frame fell badly
-            // behind the finger (the "stuck on the first frame" complaint).
-            // 30 ms in fine mode, 50 ms otherwise, with a tail-flush so the
-            // final position always lands.
-            val interval = if (mIsFineScrubbing) SCRUB_SEEK_INTERVAL_FINE_MS
-            else SCRUB_SEEK_INTERVAL_NORMAL_MS
-            val now = android.os.SystemClock.elapsedRealtime()
+            // While dragging, we let ExoPlayer's real surface stay frozen
+            // and show the pre-extracted thumbnail strip on top instead —
+            // that gives instant frame feedback regardless of how slow the
+            // hardware decoder is. The actual ExoPlayer seek only happens
+            // when the finger releases (handled in onStopTrackingTouch).
+            showScrubThumbnailAt(milliseconds)
             mPendingScrubTarget = milliseconds
-            if (now - mLastSeekTime >= interval) {
-                mLastSeekTime = now
-                if (mIsFineScrubbing) {
-                    mExoPlayer?.setSeekParameters(SeekParameters.EXACT)
-                }
-                mExoPlayer?.seekTo(milliseconds)
-                mPendingScrubTarget = -1L
-                mScrubFlushHandler.removeCallbacks(mScrubFlushRunnable)
-            } else {
-                mScrubFlushHandler.removeCallbacks(mScrubFlushRunnable)
-                mScrubFlushHandler.postDelayed(
-                    mScrubFlushRunnable,
-                    interval - (now - mLastSeekTime)
-                )
-            }
         } else {
             mExoPlayer?.seekTo(milliseconds)
         }
@@ -984,6 +980,67 @@ class VideoFragment : ViewPagerFragment(), TextureView.SurfaceTextureListener,
                 setupTimeHolder()
                 setPosition(0)
             }
+            extractScrubThumbnails()
+        }
+    }
+
+    private fun extractScrubThumbnails() {
+        if (mDuration <= 0L) return
+        if (mScrubThumbnails != null) return
+        val thumbs = arrayOfNulls<android.graphics.Bitmap>(SCRUB_THUMB_COUNT)
+        val retriever = android.media.MediaMetadataRetriever()
+        try {
+            retriever.setDataSource(mMedium.path)
+            val durationUs = mDuration * 1000L
+            for (i in 0 until SCRUB_THUMB_COUNT) {
+                if (!isAdded || activity?.isDestroyed == true) return
+                val timeUs = (durationUs * i) / SCRUB_THUMB_COUNT
+                val raw = try {
+                    retriever.getFrameAtTime(timeUs, android.media.MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
+                } catch (_: Exception) {
+                    null
+                }
+                if (raw != null) {
+                    val scaled = scaleBitmapForThumbnail(raw, SCRUB_THUMB_MAX_DIM)
+                    if (scaled !== raw) raw.recycle()
+                    thumbs[i] = scaled
+                }
+            }
+            mScrubThumbnails = thumbs
+        } catch (_: Exception) {
+        } finally {
+            try { retriever.release() } catch (_: Exception) {}
+        }
+    }
+
+    private fun scaleBitmapForThumbnail(src: android.graphics.Bitmap, maxDim: Int): android.graphics.Bitmap {
+        val w = src.width
+        val h = src.height
+        if (w <= maxDim && h <= maxDim) return src
+        val ratio = maxDim.toFloat() / maxOf(w, h)
+        val newW = (w * ratio).toInt().coerceAtLeast(1)
+        val newH = (h * ratio).toInt().coerceAtLeast(1)
+        return android.graphics.Bitmap.createScaledBitmap(src, newW, newH, true)
+    }
+
+    private fun showScrubThumbnailAt(positionMs: Long) {
+        val thumbs = mScrubThumbnails ?: return
+        if (mDuration <= 0L) return
+        val ratio = positionMs.toFloat() / mDuration
+        val idx = (ratio * thumbs.size).toInt().coerceIn(0, thumbs.size - 1)
+        val bitmap = thumbs[idx] ?: return
+        val view = binding.scrubPreview
+        view.setImageBitmap(bitmap)
+        if (view.visibility != android.view.View.VISIBLE) {
+            view.visibility = android.view.View.VISIBLE
+        }
+    }
+
+    private fun hideScrubThumbnail() {
+        try {
+            binding.scrubPreview.visibility = android.view.View.GONE
+            binding.scrubPreview.setImageDrawable(null)
+        } catch (_: Exception) {
         }
     }
 
@@ -1069,6 +1126,8 @@ class VideoFragment : ViewPagerFragment(), TextureView.SurfaceTextureListener,
     private fun cleanup() {
         pauseVideo()
         releaseExoPlayer()
+        mScrubThumbnails?.forEach { it?.recycle() }
+        mScrubThumbnails = null
 
         if (mWasFragmentInit) {
             mCurrTimeView.text = 0.getFormattedDuration()
@@ -1093,7 +1152,19 @@ class VideoFragment : ViewPagerFragment(), TextureView.SurfaceTextureListener,
     override fun onSurfaceTextureDestroyed(surface: SurfaceTexture) = false
 
     override fun onSurfaceTextureAvailable(surface: SurfaceTexture, width: Int, height: Int) {
-        mExoPlayer?.setVideoSurface(Surface(mTextureView.surfaceTexture))
+        mExoPlayer?.let { player ->
+            player.setVideoSurface(Surface(mTextureView.surfaceTexture))
+            // After the surface re-attaches (e.g. user returned to the app
+            // while a paused video was on screen), the renderer doesn't
+            // proactively re-emit a frame to it. Without a nudge the user
+            // sees a black viewport until they touch something. A small
+            // seek forces ExoPlayer to decode + display the current frame.
+            try {
+                val pos = player.currentPosition
+                player.seekTo(pos.coerceAtLeast(0))
+            } catch (_: Exception) {
+            }
+        }
     }
 
     private fun setVideoSize() {
