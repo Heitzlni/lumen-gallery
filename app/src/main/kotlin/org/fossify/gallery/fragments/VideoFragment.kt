@@ -937,33 +937,30 @@ class VideoFragment : ViewPagerFragment(), TextureView.SurfaceTextureListener,
         }
 
         if (mIsDragged) {
-            if (mIsFineScrubbing) {
-                // Fine scrub: skip the throttle entirely. The user is moving
-                // slowly enough that ExoPlayer's seek queue can keep up, and
-                // any throttle ends up dropping intermediate frames the user
-                // is trying to see. Re-affirm EXACT seek params on every
-                // seek so a mid-drag mode change always takes effect.
-                mExoPlayer?.setSeekParameters(SeekParameters.EXACT)
-                mExoPlayer?.seekTo(milliseconds)
-                mScrubFlushHandler.removeCallbacks(mScrubFlushRunnable)
-                mPendingScrubTarget = -1L
-            } else {
-                // Normal scrub: throttle so the keyframe-snap renderer has
-                // time to display each frame.
-                val now = android.os.SystemClock.elapsedRealtime()
-                mPendingScrubTarget = milliseconds
-                if (now - mLastSeekTime >= SCRUB_SEEK_INTERVAL_NORMAL_MS) {
-                    mLastSeekTime = now
-                    mExoPlayer?.seekTo(milliseconds)
-                    mPendingScrubTarget = -1L
-                    mScrubFlushHandler.removeCallbacks(mScrubFlushRunnable)
-                } else {
-                    mScrubFlushHandler.removeCallbacks(mScrubFlushRunnable)
-                    mScrubFlushHandler.postDelayed(
-                        mScrubFlushRunnable,
-                        SCRUB_SEEK_INTERVAL_NORMAL_MS - (now - mLastSeekTime)
-                    )
+            // Throttle scrub seeks. Removing the throttle entirely was a v5.4
+            // regression — flooding ExoPlayer with seekTo calls during a fine
+            // scrub ended up queueing them so the rendered frame fell badly
+            // behind the finger (the "stuck on the first frame" complaint).
+            // 30 ms in fine mode, 50 ms otherwise, with a tail-flush so the
+            // final position always lands.
+            val interval = if (mIsFineScrubbing) SCRUB_SEEK_INTERVAL_FINE_MS
+            else SCRUB_SEEK_INTERVAL_NORMAL_MS
+            val now = android.os.SystemClock.elapsedRealtime()
+            mPendingScrubTarget = milliseconds
+            if (now - mLastSeekTime >= interval) {
+                mLastSeekTime = now
+                if (mIsFineScrubbing) {
+                    mExoPlayer?.setSeekParameters(SeekParameters.EXACT)
                 }
+                mExoPlayer?.seekTo(milliseconds)
+                mPendingScrubTarget = -1L
+                mScrubFlushHandler.removeCallbacks(mScrubFlushRunnable)
+            } else {
+                mScrubFlushHandler.removeCallbacks(mScrubFlushRunnable)
+                mScrubFlushHandler.postDelayed(
+                    mScrubFlushRunnable,
+                    interval - (now - mLastSeekTime)
+                )
             }
         } else {
             mExoPlayer?.seekTo(milliseconds)
@@ -1036,6 +1033,25 @@ class VideoFragment : ViewPagerFragment(), TextureView.SurfaceTextureListener,
 
     /** Public accessor so the activity can gate PiP entry on actual playback. */
     fun isCurrentlyPlaying(): Boolean = mIsPlaying
+
+    /**
+     * When the activity is brought back to the foreground (e.g. user
+     * tapped the launcher icon while a paused video was on screen), the
+     * TextureView surface gets re-attached but ExoPlayer doesn't push a
+     * new frame to it until something forces a render. Result: black
+     * window. Re-seeking to the current position forces a re-render of
+     * the existing paused frame.
+     */
+    fun redrawCurrentFrame() {
+        val player = mExoPlayer ?: return
+        try {
+            val pos = player.currentPosition
+            if (pos >= 0L) {
+                player.seekTo(pos)
+            }
+        } catch (_: Exception) {
+        }
+    }
 
     /**
      * Force the player to stop and release. Called by ViewPagerActivity in
