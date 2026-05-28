@@ -263,6 +263,18 @@ class ViewPagerActivity : BaseViewerActivity(), ViewPager.OnPageChangeListener, 
         stopSlideshow()
     }
 
+    private fun launchEditOrTrim() {
+        val current = getCurrentMedium() ?: return
+        if (current.isVideo()) {
+            val intent = android.content.Intent(this, VideoTrimActivity::class.java).apply {
+                putExtra(org.fossify.gallery.helpers.PATH, current.path)
+            }
+            startActivity(intent)
+        } else {
+            openEditor(current.path)
+        }
+    }
+
     override fun onUserLeaveHint() {
         super.onUserLeaveHint()
         if (!config.enablePictureInPicture) return
@@ -282,12 +294,30 @@ class ViewPagerActivity : BaseViewerActivity(), ViewPager.OnPageChangeListener, 
         newConfig: android.content.res.Configuration
     ) {
         super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
-        // Hide the toolbar + bottom actions while in PiP so only the video is
-        // visible in the floating window. Restored when returning to full UI.
-        val chromeVisibility = if (isInPictureInPictureMode) android.view.View.GONE else android.view.View.VISIBLE
-        binding.mediumViewerAppbar.visibility = chromeVisibility
-        if (config.bottomActions) {
-            binding.bottomActions.root.visibility = chromeVisibility
+        // Hide every overlay so the PiP window shows the video and nothing
+        // else. Restore when we're back on screen.
+        if (isInPictureInPictureMode) {
+            binding.mediumViewerAppbar.visibility = android.view.View.GONE
+            binding.bottomActions.root.visibility = android.view.View.GONE
+        } else {
+            binding.mediumViewerAppbar.visibility = android.view.View.VISIBLE
+            if (config.bottomActions) {
+                binding.bottomActions.root.visibility = android.view.View.VISIBLE
+            }
+        }
+    }
+
+    override fun onStop() {
+        super.onStop()
+        // While the activity is still in PiP, the system has us in the
+        // Started state — onStop only fires after PiP is closed or the
+        // activity is otherwise being torn down. At that point, make sure
+        // we tear the player down so audio doesn't keep playing in the
+        // background.
+        val inPip = android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O &&
+            isInPictureInPictureMode
+        if (!inPip && !isChangingConfigurations) {
+            (getCurrentFragment() as? org.fossify.gallery.fragments.VideoFragment)?.releaseFromPip()
         }
     }
 
@@ -386,7 +416,7 @@ class ViewPagerActivity : BaseViewerActivity(), ViewPager.OnPageChangeListener, 
                 R.id.menu_delete -> checkDeleteConfirmation()
                 R.id.menu_rename -> checkMediaManagementAndRename()
                 R.id.menu_print -> printFile()
-                R.id.menu_edit -> openEditor(getCurrentPath())
+                R.id.menu_edit -> launchEditOrTrim()
                 R.id.menu_properties -> showProperties()
                 R.id.menu_show_on_map -> showFileOnMap(getCurrentPath())
                 R.id.menu_rotate_right -> rotateImage(90)
@@ -982,7 +1012,7 @@ class ViewPagerActivity : BaseViewerActivity(), ViewPager.OnPageChangeListener, 
         binding.bottomActions.bottomEdit.beVisibleIf(visibleBottomActions and BOTTOM_ACTION_EDIT != 0 && currentMedium?.isSVG() == false)
         binding.bottomActions.bottomEdit.setOnLongClickListener { toast(R.string.edit); true }
         binding.bottomActions.bottomEdit.setOnClickListener {
-            openEditor(getCurrentPath())
+            launchEditOrTrim()
         }
 
         binding.bottomActions.bottomShare.beVisibleIf(visibleBottomActions and BOTTOM_ACTION_SHARE != 0)
@@ -1109,6 +1139,9 @@ class ViewPagerActivity : BaseViewerActivity(), ViewPager.OnPageChangeListener, 
 
             runOnUiThread {
                 refreshMenuItems()
+                // The bottom-bar star image wasn't being refreshed, so
+                // after un-favoriting the filled star kept showing.
+                updateBottomActionIcons(medium)
             }
         }
     }

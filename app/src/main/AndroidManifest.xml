@@ -105,6 +105,7 @@
             android:name=".activities.ViewPagerActivity"
             android:configChanges="orientation|keyboardHidden|screenSize|screenLayout|smallestScreenSize"
             android:exported="true"
+            android:launchMode="singleTask"
             android:parentActivityName=".activities.MediaActivity"
             android:resizeableActivity="true"
             android:supportsPictureInPicture="true"

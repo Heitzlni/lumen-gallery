@@ -332,8 +332,15 @@ class MediaAdapter(
     }
 
     private fun editFile() {
-        val path = getFirstSelectedItemPath() ?: return
-        activity.openEditor(path)
+        val item = getSelectedItems().firstOrNull() ?: return
+        // For videos, route the Edit button to our built-in trimmer instead
+        // of firing ACTION_EDIT (which Android resolves to Google Photos /
+        // whatever else is installed). Trim is what most people want anyway.
+        if (item.isVideo()) {
+            launchVideoTrim()
+            return
+        }
+        activity.openEditor(item.path)
     }
 
     private fun openPath() {
