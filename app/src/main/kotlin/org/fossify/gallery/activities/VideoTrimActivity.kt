@@ -202,10 +202,13 @@ class VideoTrimActivity : SimpleActivity() {
         val (baseName, ext) = splitNameExt(originalName)
         val outName = "${baseName}_trimmed.${ext.ifEmpty { "mp4" }}"
 
-        // Carry the original "shot at" timestamp forward to the trimmed copy
-        // so it lands at the right place in the gallery timeline. Fall back
-        // to the source file's mtime, then to "now".
-        val sourceDate = extractSourceDateMs(sourcePath)
+        // Carry the original "shot at" timestamp forward — but offset the
+        // trimmed copy by +1 second so it sorts immediately AFTER the
+        // original in the camera roll (instead of getting bucketed at the
+        // top of that day's section because of how date_taken collisions
+        // get resolved).
+        val rawSourceDate = extractSourceDateMs(sourcePath)
+        val sourceDate = if (rawSourceDate > 0L) rawSourceDate + 1000L else 0L
 
         val values = ContentValues().apply {
             put(MediaStore.Video.Media.DISPLAY_NAME, outName)
