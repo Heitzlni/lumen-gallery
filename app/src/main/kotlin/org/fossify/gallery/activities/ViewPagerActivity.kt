@@ -264,10 +264,16 @@ class ViewPagerActivity : BaseViewerActivity(), ViewPager.OnPageChangeListener, 
         // plus the existing redrawCurrentFrame() that asks ExoPlayer for
         // a frame. The poster stays visible until the user starts
         // playback (handled by onIsPlayingChanged).
+        //
+        // Also (re)start the chrome auto-hide timer here so initial video
+        // opens get the auto-hide too, not just taps after that point.
         android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
             val frag = getCurrentFragment() as? org.fossify.gallery.fragments.VideoFragment
             frag?.showPosterAtCurrentPosition()
             frag?.redrawCurrentFrame()
+            if (!mIsFullScreen && getCurrentMedium()?.isVideo() == true) {
+                scheduleChromeAutoHide()
+            }
         }, 50L)
     }
 
