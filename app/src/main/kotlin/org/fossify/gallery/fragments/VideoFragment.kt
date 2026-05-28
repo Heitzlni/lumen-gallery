@@ -634,6 +634,13 @@ class VideoFragment : ViewPagerFragment(), TextureView.SurfaceTextureListener,
                 }
             }
 
+            override fun onRenderedFirstFrame() {
+                // After surface re-attach, ExoPlayer fires this once the
+                // real video frame hits the texture. Drop the thumbnail
+                // poster that's been holding the viewport.
+                hideScrubThumbnail()
+            }
+
             override fun onVideoSizeChanged(videoSize: VideoSize) {
                 mVideoSize.x = videoSize.width
                 mVideoSize.y = (videoSize.height / videoSize.pixelWidthHeightRatio).toInt()
@@ -995,7 +1002,18 @@ class VideoFragment : ViewPagerFragment(), TextureView.SurfaceTextureListener,
             for (i in 0 until SCRUB_THUMB_COUNT) {
                 if (!isAdded || activity?.isDestroyed == true) return
                 val timeUs = (durationUs * i) / SCRUB_THUMB_COUNT
+                // OPTION_CLOSEST_SYNC snaps to the nearest *keyframe* — on a
+                // short video that means several of our timestamps collapse
+                // to the same keyframe and the scrub preview looks frozen.
+                // OPTION_CLOSEST decodes intermediate frames between the
+                // previous keyframe and the target. Slower per frame, but it
+                // gives us 48 distinct frames instead of ~5.
                 val raw = try {
+                    retriever.getFrameAtTime(timeUs, android.media.MediaMetadataRetriever.OPTION_CLOSEST)
+                } catch (_: Exception) {
+                    null
+                } ?: try {
+                    // Fallback for codecs/devices where OPTION_CLOSEST throws.
                     retriever.getFrameAtTime(timeUs, android.media.MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
                 } catch (_: Exception) {
                     null
@@ -1153,13 +1171,20 @@ class VideoFragment : ViewPagerFragment(), TextureView.SurfaceTextureListener,
 
     override fun onSurfaceTextureAvailable(surface: SurfaceTexture, width: Int, height: Int) {
         mExoPlayer?.let { player ->
+            // Belt-and-suspenders for the "black viewport after returning to
+            // the app on a paused video" problem:
+            //   1) Drop the nearest pre-extracted scrub thumbnail into the
+            //      overlay as a poster — guaranteed to show *something*.
+            //   2) Re-attach the new surface to the player.
+            //   3) Force a real seek (position - 1) so ExoPlayer decodes
+            //      and renders to the freshly attached surface. The
+            //      onRenderedFirstFrame listener will hide the poster
+            //      once the real frame is on screen.
+            try {
+                showScrubThumbnailAt(player.currentPosition)
+            } catch (_: Exception) {
+            }
             player.setVideoSurface(Surface(mTextureView.surfaceTexture))
-            // After the surface re-attaches (returning to the app while a
-            // paused video was on screen), ExoPlayer doesn't re-render. A
-            // seek to the SAME position is a no-op for the renderer, so we
-            // jump to position-1 (or +1 from zero) — different enough to
-            // force a real decode + push to the fresh surface. Post to the
-            // view so the surface is fully ready first.
             mTextureView.post {
                 try {
                     val pos = player.currentPosition
