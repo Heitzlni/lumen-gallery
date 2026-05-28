@@ -257,14 +257,17 @@ class ViewPagerActivity : BaseViewerActivity(), ViewPager.OnPageChangeListener, 
         val filename = getCurrentMedium()?.name ?: mPath.getFilenameFromPath()
         binding.mediumViewerToolbar.title = filename
 
-        // After backgrounding with a paused video (Texture surface is
-        // re-attached on resume but ExoPlayer hasn't pushed a frame yet),
-        // the viewport renders black. Force the current fragment to
-        // re-emit its current frame. Slight delay so the surface is
-        // ready before we ask for a redraw.
+        // After backgrounding with a paused video the viewport often
+        // renders black even though the texture surface is technically
+        // alive. Belt-and-suspenders: drop a scrub-thumbnail poster
+        // straight into the overlay (works regardless of surface events),
+        // plus the existing redrawCurrentFrame() that asks ExoPlayer for
+        // a frame. The poster stays visible until the user starts
+        // playback (handled by onIsPlayingChanged).
         android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
-            (getCurrentFragment() as? org.fossify.gallery.fragments.VideoFragment)
-                ?.redrawCurrentFrame()
+            val frag = getCurrentFragment() as? org.fossify.gallery.fragments.VideoFragment
+            frag?.showPosterAtCurrentPosition()
+            frag?.redrawCurrentFrame()
         }, 50L)
     }
 

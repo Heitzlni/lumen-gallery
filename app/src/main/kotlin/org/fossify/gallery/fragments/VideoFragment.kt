@@ -1017,43 +1017,83 @@ class VideoFragment : ViewPagerFragment(), TextureView.SurfaceTextureListener,
         }
 
         val thumbs = arrayOfNulls<android.graphics.Bitmap>(SCRUB_THUMB_COUNT)
-        val retriever = android.media.MediaMetadataRetriever()
-        try {
-            retriever.setDataSource(mMedium.path)
-            val durationUs = mDuration * 1000L
-            for (i in 0 until SCRUB_THUMB_COUNT) {
-                if (!isAdded || activity?.isDestroyed == true) return
-                val timeUs = (durationUs * i) / SCRUB_THUMB_COUNT
-                // OPTION_CLOSEST decodes intermediate frames (slower per
-                // frame, but distinct). Falls back to OPTION_CLOSEST_SYNC
-                // for codecs that reject it.
-                val raw = try {
-                    retriever.getFrameAtTime(timeUs, android.media.MediaMetadataRetriever.OPTION_CLOSEST)
+        val durationUs = mDuration * 1000L
+        // Parallelize across N workers — setDataSource on MediaMetadataRetriever
+        // is the expensive bit (~hundreds of ms), so the wall-clock win is
+        // significant. Each worker has its own MMR. 4 is a sweet spot on
+        // modern phones without thrashing the codec.
+        val numWorkers = 4
+        val executor = java.util.concurrent.Executors.newFixedThreadPool(numWorkers)
+        val latch = java.util.concurrent.CountDownLatch(numWorkers)
+        val sourcePath = mMedium.path
+
+        for (workerIdx in 0 until numWorkers) {
+            executor.submit {
+                val mmr = android.media.MediaMetadataRetriever()
+                try {
+                    mmr.setDataSource(sourcePath)
+                    var i = workerIdx
+                    while (i < SCRUB_THUMB_COUNT) {
+                        if (!isAdded || activity?.isDestroyed == true) return@submit
+                        val timeUs = (durationUs * i) / SCRUB_THUMB_COUNT
+                        val bitmap = extractOneScrubFrame(mmr, timeUs)
+                        if (bitmap != null) thumbs[i] = bitmap
+                        i += numWorkers
+                    }
                 } catch (_: Exception) {
-                    null
-                } ?: try {
-                    retriever.getFrameAtTime(timeUs, android.media.MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
-                } catch (_: Exception) {
-                    null
-                }
-                if (raw != null) {
-                    val scaled = scaleBitmapForThumbnail(raw, SCRUB_THUMB_MAX_DIM)
-                    if (scaled !== raw) raw.recycle()
-                    thumbs[i] = scaled
+                } finally {
+                    try { mmr.release() } catch (_: Exception) {}
+                    latch.countDown()
                 }
             }
-            mScrubThumbnails = thumbs
-            // Persist to disk in the background so subsequent opens are
-            // instant. Best-effort — failures here don't hurt the runtime
-            // experience.
+        }
+
+        try {
+            latch.await()
+        } catch (_: InterruptedException) {
+        }
+        executor.shutdown()
+
+        mScrubThumbnails = thumbs
+        try {
+            saveScrubThumbnailsToDisk(cacheDir, thumbs)
+        } catch (_: Exception) {
+        }
+    }
+
+    private fun extractOneScrubFrame(
+        mmr: android.media.MediaMetadataRetriever,
+        timeUs: Long
+    ): android.graphics.Bitmap? {
+        // Prefer hardware-accelerated getScaledFrameAtTime on API 27+ —
+        // skips an entire Bitmap.createScaledBitmap pass.
+        if (android.os.Build.VERSION.SDK_INT >= 27) {
             try {
-                saveScrubThumbnailsToDisk(cacheDir, thumbs)
+                val scaled = mmr.getScaledFrameAtTime(
+                    timeUs,
+                    android.media.MediaMetadataRetriever.OPTION_CLOSEST,
+                    SCRUB_THUMB_MAX_DIM,
+                    SCRUB_THUMB_MAX_DIM
+                )
+                if (scaled != null) return scaled
             } catch (_: Exception) {
             }
-        } catch (_: Exception) {
-        } finally {
-            try { retriever.release() } catch (_: Exception) {}
         }
+        // OPTION_CLOSEST decodes intermediate frames (slower per frame, but
+        // distinct). Falls back to OPTION_CLOSEST_SYNC for codecs that
+        // reject it.
+        val raw = try {
+            mmr.getFrameAtTime(timeUs, android.media.MediaMetadataRetriever.OPTION_CLOSEST)
+        } catch (_: Exception) {
+            null
+        } ?: try {
+            mmr.getFrameAtTime(timeUs, android.media.MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
+        } catch (_: Exception) {
+            null
+        } ?: return null
+        val scaled = scaleBitmapForThumbnail(raw, SCRUB_THUMB_MAX_DIM)
+        if (scaled !== raw) raw.recycle()
+        return scaled
     }
 
     private fun scrubCacheKeyForCurrentVideo(): String {
@@ -1197,6 +1237,23 @@ class VideoFragment : ViewPagerFragment(), TextureView.SurfaceTextureListener,
             if (pos >= 0L) {
                 player.seekTo(pos)
             }
+        } catch (_: Exception) {
+        }
+    }
+
+    /**
+     * Drop the nearest pre-extracted thumbnail into the scrub_preview
+     * overlay as a static poster while the video is paused. Called from
+     * ViewPagerActivity.onResume regardless of whether the texture
+     * surface fired its re-attach callback (it sometimes doesn't if
+     * Android kept the SurfaceTexture alive across the pause). The
+     * poster stays up until onIsPlayingChanged(true) hides it.
+     */
+    fun showPosterAtCurrentPosition() {
+        if (mIsPlaying) return
+        try {
+            val pos = mExoPlayer?.currentPosition ?: 0L
+            showScrubThumbnailAt(pos)
         } catch (_: Exception) {
         }
     }
