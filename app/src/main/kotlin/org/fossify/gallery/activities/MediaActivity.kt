@@ -70,6 +70,7 @@ import org.fossify.gallery.extensions.directoryDB
 import org.fossify.gallery.extensions.emptyAndDisableTheRecycleBin
 import org.fossify.gallery.extensions.emptyTheRecycleBin
 import org.fossify.gallery.extensions.favoritesDB
+import org.fossify.gallery.extensions.getFavoritePaths
 import org.fossify.gallery.extensions.getCachedMedia
 import org.fossify.gallery.extensions.getHumanizedFilename
 import org.fossify.gallery.extensions.isDownloadsFolder
@@ -236,6 +237,7 @@ class MediaActivity : SimpleActivity(), MediaOperationsListener {
         }
 
         refreshMenuItems()
+        refreshFavoriteStatesFromDB()
 
         binding.mediaFastscroller.updateColors(primaryColor)
         binding.mediaRefreshLayout.isEnabled = config.enablePullToRefresh
@@ -326,6 +328,31 @@ class MediaActivity : SimpleActivity(), MediaOperationsListener {
             }
         }
         super.onActivityResult(requestCode, resultCode, resultData)
+    }
+
+    /**
+     * Re-syncs the cached Medium.isFavorite flags with the favorites DB and
+     * re-binds the grid. Called from onResume so un-favoriting in the photo
+     * viewer is reflected on the thumbnails without a manual pull-to-refresh.
+     */
+    private fun refreshFavoriteStatesFromDB() {
+        val adapter = getMediaAdapter() ?: return
+        org.fossify.commons.helpers.ensureBackgroundThread {
+            val favPaths = applicationContext.getFavoritePaths().toHashSet()
+            var changed = false
+            adapter.media.forEach { item ->
+                if (item is org.fossify.gallery.models.Medium) {
+                    val shouldBeFav = favPaths.contains(item.path)
+                    if (item.isFavorite != shouldBeFav) {
+                        item.isFavorite = shouldBeFav
+                        changed = true
+                    }
+                }
+            }
+            if (changed) {
+                runOnUiThread { adapter.notifyDataSetChanged() }
+            }
+        }
     }
 
     private fun refreshMenuItems() {

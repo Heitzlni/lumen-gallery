@@ -123,11 +123,13 @@ class VideoFragment : ViewPagerFragment(), TextureView.SurfaceTextureListener,
     private var mTimerHandler = Handler()
 
     // Throttle scrub-induced seeks: ExoPlayer can't render a fresh frame on
-    // every pixel of finger movement, so we only fire seekTo() at most ~20
-    // times per second while dragging. The seekbar/label keep moving with
-    // the finger so the UI still feels responsive.
+    // every pixel of finger movement. Faster cadence during fine-scrub so
+    // the user sees more intermediate frames (matched with EXACT seek
+    // mode), normal cadence otherwise.
     private var mLastSeekTime = 0L
-    private val SCRUB_SEEK_MIN_INTERVAL_MS = 50L
+    private var mIsFineScrubbing = false
+    private val SCRUB_SEEK_INTERVAL_NORMAL_MS = 50L
+    private val SCRUB_SEEK_INTERVAL_FINE_MS = 30L
     private var mPendingScrubTarget: Long = -1L
     private val mScrubFlushHandler = Handler(android.os.Looper.getMainLooper())
     private val mScrubFlushRunnable = Runnable { flushPendingScrub() }
@@ -213,9 +215,18 @@ class VideoFragment : ViewPagerFragment(), TextureView.SurfaceTextureListener,
             bottomVideoTimeHolder.videoSeekbar.fineModeListener = { scale ->
                 if (scale >= 0.99f) {
                     scrubSpeedView.visibility = android.view.View.GONE
+                    // Normal-speed scrubbing: snap to keyframes for speed.
+                    mExoPlayer?.setSeekParameters(SeekParameters.CLOSEST_SYNC)
+                    mIsFineScrubbing = false
                 } else {
                     scrubSpeedView.text = getString(R.string.scrub_speed_label, scale)
                     scrubSpeedView.visibility = android.view.View.VISIBLE
+                    // Fine scrubbing: the user is moving slowly to see specific
+                    // frames, so switch to EXACT seek (decode intermediate
+                    // frames) — gives true per-frame precision instead of
+                    // keyframe-only.
+                    mExoPlayer?.setSeekParameters(SeekParameters.EXACT)
+                    mIsFineScrubbing = true
                 }
             }
 
@@ -930,7 +941,7 @@ class VideoFragment : ViewPagerFragment(), TextureView.SurfaceTextureListener,
             // time to decode a frame for each one and the preview keeps up.
             val now = android.os.SystemClock.elapsedRealtime()
             mPendingScrubTarget = milliseconds
-            if (now - mLastSeekTime >= SCRUB_SEEK_MIN_INTERVAL_MS) {
+            if (now - mLastSeekTime >= (if (mIsFineScrubbing) SCRUB_SEEK_INTERVAL_FINE_MS else SCRUB_SEEK_INTERVAL_NORMAL_MS)) {
                 mLastSeekTime = now
                 mExoPlayer?.seekTo(milliseconds)
                 mPendingScrubTarget = -1L
@@ -941,7 +952,7 @@ class VideoFragment : ViewPagerFragment(), TextureView.SurfaceTextureListener,
                 mScrubFlushHandler.removeCallbacks(mScrubFlushRunnable)
                 mScrubFlushHandler.postDelayed(
                     mScrubFlushRunnable,
-                    SCRUB_SEEK_MIN_INTERVAL_MS - (now - mLastSeekTime)
+                    (if (mIsFineScrubbing) SCRUB_SEEK_INTERVAL_FINE_MS else SCRUB_SEEK_INTERVAL_NORMAL_MS) - (now - mLastSeekTime)
                 )
             }
         } else {

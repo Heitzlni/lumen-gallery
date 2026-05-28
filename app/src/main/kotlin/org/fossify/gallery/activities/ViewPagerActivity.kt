@@ -294,8 +294,6 @@ class ViewPagerActivity : BaseViewerActivity(), ViewPager.OnPageChangeListener, 
         newConfig: android.content.res.Configuration
     ) {
         super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
-        // Hide every overlay so the PiP window shows the video and nothing
-        // else. Restore when we're back on screen.
         if (isInPictureInPictureMode) {
             binding.mediumViewerAppbar.visibility = android.view.View.GONE
             binding.bottomActions.root.visibility = android.view.View.GONE
@@ -304,6 +302,16 @@ class ViewPagerActivity : BaseViewerActivity(), ViewPager.OnPageChangeListener, 
             if (config.bottomActions) {
                 binding.bottomActions.root.visibility = android.view.View.VISIBLE
             }
+            // Closing the PiP window vs. returning to full-screen both call
+            // this with isInPictureInPictureMode=false. Wait briefly and
+            // check window focus — if we don't have it, the user dismissed
+            // PiP and the player needs to release.
+            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                if (!hasWindowFocus()) {
+                    (getCurrentFragment() as? org.fossify.gallery.fragments.VideoFragment)
+                        ?.releaseFromPip()
+                }
+            }, 400L)
         }
     }
 
@@ -1482,6 +1490,32 @@ class ViewPagerActivity : BaseViewerActivity(), ViewPager.OnPageChangeListener, 
         mIsFullScreen = !mIsFullScreen
         checkSystemUI()
         fullscreenToggled()
+        if (!mIsFullScreen && getCurrentMedium()?.isVideo() == true) {
+            scheduleChromeAutoHide()
+        } else {
+            cancelChromeAutoHide()
+        }
+    }
+
+    // Auto-hide the toolbar + bottom actions a few seconds after revealing
+    // them while a video is showing — same behaviour every native video
+    // player has. Reset by any user-initiated re-show (which goes through
+    // fragmentClicked()).
+    private val mChromeAutoHideHandler = android.os.Handler(android.os.Looper.getMainLooper())
+    private val mChromeAutoHideRunnable = Runnable {
+        if (!mIsFullScreen && getCurrentMedium()?.isVideo() == true) {
+            fragmentClicked()
+        }
+    }
+    private val CHROME_AUTOHIDE_DELAY_MS = 5000L
+
+    private fun scheduleChromeAutoHide() {
+        mChromeAutoHideHandler.removeCallbacks(mChromeAutoHideRunnable)
+        mChromeAutoHideHandler.postDelayed(mChromeAutoHideRunnable, CHROME_AUTOHIDE_DELAY_MS)
+    }
+
+    private fun cancelChromeAutoHide() {
+        mChromeAutoHideHandler.removeCallbacks(mChromeAutoHideRunnable)
     }
 
     override fun videoEnded(): Boolean {
@@ -1589,6 +1623,13 @@ class ViewPagerActivity : BaseViewerActivity(), ViewPager.OnPageChangeListener, 
             updateActionbarTitle()
             refreshMenuItems()
             scheduleSwipe()
+            // Restart the auto-hide timer when landing on a video; cancel
+            // for images.
+            if (!mIsFullScreen && getCurrentMedium()?.isVideo() == true) {
+                scheduleChromeAutoHide()
+            } else {
+                cancelChromeAutoHide()
+            }
         }
     }
 
