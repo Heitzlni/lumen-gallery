@@ -122,6 +122,16 @@ class VideoFragment : ViewPagerFragment(), TextureView.SurfaceTextureListener,
     private var mVideoSize = Point(1, 1)
     private var mTimerHandler = Handler()
 
+    // Throttle scrub-induced seeks: ExoPlayer can't render a fresh frame on
+    // every pixel of finger movement, so we only fire seekTo() at most ~20
+    // times per second while dragging. The seekbar/label keep moving with
+    // the finger so the UI still feels responsive.
+    private var mLastSeekTime = 0L
+    private val SCRUB_SEEK_MIN_INTERVAL_MS = 50L
+    private var mPendingScrubTarget: Long = -1L
+    private val mScrubFlushHandler = Handler(android.os.Looper.getMainLooper())
+    private val mScrubFlushRunnable = Runnable { flushPendingScrub() }
+
     private var mStoredShowExtendedDetails = false
     private var mStoredHideExtendedDetails = false
     private var mStoredBottomActions = true
@@ -225,19 +235,35 @@ class VideoFragment : ViewPagerFragment(), TextureView.SurfaceTextureListener,
             val gestureDetector =
                 GestureDetector(context, object : GestureDetector.SimpleOnGestureListener() {
                     override fun onSingleTapConfirmed(e: MotionEvent): Boolean {
-                        if (!mConfig.allowInstantChange) {
-                            // YouTube-style: single tap on video pauses / resumes.
-                            togglePlayPause()
-                            return true
+                        val viewWidth = root.width
+                        val viewHeight = root.height
+                        val clickedX = e.rawX
+                        val clickedY = e.rawY
+
+                        if (mConfig.allowInstantChange) {
+                            val instantWidth = viewWidth / 7
+                            if (clickedX <= instantWidth) {
+                                listener?.goToPrevItem()
+                                return true
+                            }
+                            if (clickedX >= viewWidth - instantWidth) {
+                                listener?.goToNextItem()
+                                return true
+                            }
                         }
 
-                        val viewWidth = root.width
-                        val instantWidth = viewWidth / 7
-                        val clickedX = e.rawX
-                        when {
-                            clickedX <= instantWidth -> listener?.goToPrevItem()
-                            clickedX >= viewWidth - instantWidth -> listener?.goToNextItem()
-                            else -> togglePlayPause()
+                        // Any single tap should reveal the chrome (toolbar /
+                        // bottom actions) if it's currently hidden — Google
+                        // Photos-style. Calling toggleFullscreen() while in
+                        // fullscreen exits fullscreen (shows chrome).
+                        if (mIsFullscreen) toggleFullscreen()
+
+                        // Bottom ~18% is a "show controls only" zone — don't
+                        // pause when the user taps near the bottom edge, that
+                        // was the over-eager pause complaint.
+                        val bottomNoPauseZone = viewHeight * 0.82f
+                        if (clickedY < bottomNoPauseZone) {
+                            togglePlayPause()
                         }
                         return true
                     }
@@ -782,10 +808,14 @@ class VideoFragment : ViewPagerFragment(), TextureView.SurfaceTextureListener,
         }
 
         mExoPlayer!!.setSeekParameters(SeekParameters.EXACT)
-        // Re-seek precisely to the final position so the displayed frame
-        // matches where the user released the scrubber, not the nearest
-        // keyframe used during the fast drag.
-        mExoPlayer!!.seekTo(mExoPlayer!!.currentPosition)
+        mScrubFlushHandler.removeCallbacks(mScrubFlushRunnable)
+        // Re-seek precisely to the visible scrubber position so the displayed
+        // frame matches where the user released, not whichever throttled seek
+        // happened last.
+        val finalTarget =
+            if (mPendingScrubTarget >= 0L) mPendingScrubTarget else mSeekBar.progress.toLong()
+        mPendingScrubTarget = -1L
+        mExoPlayer!!.seekTo(finalTarget)
 
         if (mIsPlaying) {
             mExoPlayer!!.playWhenReady = true
@@ -887,12 +917,44 @@ class VideoFragment : ViewPagerFragment(), TextureView.SurfaceTextureListener,
     }
 
     private fun setPosition(milliseconds: Long) {
-        mExoPlayer?.seekTo(milliseconds)
+        // Always update the visible scrubber + time label immediately so the
+        // finger movement feels live.
         mSeekBar.progress = milliseconds.toInt()
         mCurrTimeView.text = milliseconds.getFormattedDuration()
-
         if (!mIsPlaying) {
             mPositionAtPause = milliseconds
+        }
+
+        if (mIsDragged) {
+            // While scrubbing, throttle the actual ExoPlayer seek so it has
+            // time to decode a frame for each one and the preview keeps up.
+            val now = android.os.SystemClock.elapsedRealtime()
+            mPendingScrubTarget = milliseconds
+            if (now - mLastSeekTime >= SCRUB_SEEK_MIN_INTERVAL_MS) {
+                mLastSeekTime = now
+                mExoPlayer?.seekTo(milliseconds)
+                mPendingScrubTarget = -1L
+                mScrubFlushHandler.removeCallbacks(mScrubFlushRunnable)
+            } else {
+                // Schedule a tail seek so the final position lands even if
+                // the user stops dragging without crossing the threshold.
+                mScrubFlushHandler.removeCallbacks(mScrubFlushRunnable)
+                mScrubFlushHandler.postDelayed(
+                    mScrubFlushRunnable,
+                    SCRUB_SEEK_MIN_INTERVAL_MS - (now - mLastSeekTime)
+                )
+            }
+        } else {
+            mExoPlayer?.seekTo(milliseconds)
+        }
+    }
+
+    private fun flushPendingScrub() {
+        val target = mPendingScrubTarget
+        if (target >= 0L) {
+            mPendingScrubTarget = -1L
+            mLastSeekTime = android.os.SystemClock.elapsedRealtime()
+            mExoPlayer?.seekTo(target)
         }
     }
 
@@ -948,6 +1010,19 @@ class VideoFragment : ViewPagerFragment(), TextureView.SurfaceTextureListener,
             mSeekBar.progress = mSeekBar.max
             mCurrTimeView.text = mDuration.getFormattedDuration()
             pauseVideo()
+        }
+    }
+
+    /**
+     * Force the player to stop and release. Called by ViewPagerActivity in
+     * onStop when we're not actually in PiP anymore — so audio doesn't keep
+     * playing in the background after the user closes the PiP window.
+     */
+    fun releaseFromPip() {
+        try {
+            pauseVideo()
+            releaseExoPlayer()
+        } catch (_: Exception) {
         }
     }
 
