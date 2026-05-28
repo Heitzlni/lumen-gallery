@@ -1154,15 +1154,20 @@ class VideoFragment : ViewPagerFragment(), TextureView.SurfaceTextureListener,
     override fun onSurfaceTextureAvailable(surface: SurfaceTexture, width: Int, height: Int) {
         mExoPlayer?.let { player ->
             player.setVideoSurface(Surface(mTextureView.surfaceTexture))
-            // After the surface re-attaches (e.g. user returned to the app
-            // while a paused video was on screen), the renderer doesn't
-            // proactively re-emit a frame to it. Without a nudge the user
-            // sees a black viewport until they touch something. A small
-            // seek forces ExoPlayer to decode + display the current frame.
-            try {
-                val pos = player.currentPosition
-                player.seekTo(pos.coerceAtLeast(0))
-            } catch (_: Exception) {
+            // After the surface re-attaches (returning to the app while a
+            // paused video was on screen), ExoPlayer doesn't re-render. A
+            // seek to the SAME position is a no-op for the renderer, so we
+            // jump to position-1 (or +1 from zero) — different enough to
+            // force a real decode + push to the fresh surface. Post to the
+            // view so the surface is fully ready first.
+            mTextureView.post {
+                try {
+                    val pos = player.currentPosition
+                    val target = if (pos > 0L) (pos - 1L).coerceAtLeast(0L) else 1L
+                    player.setSeekParameters(SeekParameters.EXACT)
+                    player.seekTo(target)
+                } catch (_: Exception) {
+                }
             }
         }
     }
