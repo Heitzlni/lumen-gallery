@@ -282,12 +282,18 @@ class ViewPagerActivity : BaseViewerActivity(), ViewPager.OnPageChangeListener, 
         val current = getCurrentMedium() ?: return
         if (!current.isVideo()) return
         if (isInPictureInPictureMode) return
+        // Only float-out videos that are actively playing — entering PiP
+        // for a paused video creates a weird mini-window with no purpose.
+        val frag = getCurrentFragment() as? org.fossify.gallery.fragments.VideoFragment
+        if (frag == null || !frag.isCurrentlyPlaying()) return
         try {
             enterPictureInPictureMode(android.app.PictureInPictureParams.Builder().build())
         } catch (_: Exception) {
             // PiP not available on this device / state
         }
     }
+
+    private var mFullscreenForcedByPip = false
 
     override fun onPictureInPictureModeChanged(
         isInPictureInPictureMode: Boolean,
@@ -297,10 +303,27 @@ class ViewPagerActivity : BaseViewerActivity(), ViewPager.OnPageChangeListener, 
         if (isInPictureInPictureMode) {
             binding.mediumViewerAppbar.visibility = android.view.View.GONE
             binding.bottomActions.root.visibility = android.view.View.GONE
+            // The fragment's own chrome (time-bar, play/pause overlay, etc.)
+            // is gated on the activity's mIsFullScreen flag. Force the
+            // activity into fullscreen on the way into PiP so the floating
+            // window shows only the video surface. Remember we did this so
+            // we can restore on the way out.
+            if (!mIsFullScreen) {
+                mFullscreenForcedByPip = true
+                fragmentClicked()
+            }
         } else {
             binding.mediumViewerAppbar.visibility = android.view.View.VISIBLE
             if (config.bottomActions) {
                 binding.bottomActions.root.visibility = android.view.View.VISIBLE
+            }
+            // Undo the fullscreen we forced on the way INTO PiP so the
+            // chrome is back when the user returns to the full app.
+            if (mFullscreenForcedByPip && mIsFullScreen) {
+                mFullscreenForcedByPip = false
+                fragmentClicked()
+            } else {
+                mFullscreenForcedByPip = false
             }
             // Closing the PiP window vs. returning to full-screen both call
             // this with isInPictureInPictureMode=false. Wait briefly and

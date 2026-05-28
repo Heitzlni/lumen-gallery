@@ -937,23 +937,33 @@ class VideoFragment : ViewPagerFragment(), TextureView.SurfaceTextureListener,
         }
 
         if (mIsDragged) {
-            // While scrubbing, throttle the actual ExoPlayer seek so it has
-            // time to decode a frame for each one and the preview keeps up.
-            val now = android.os.SystemClock.elapsedRealtime()
-            mPendingScrubTarget = milliseconds
-            if (now - mLastSeekTime >= (if (mIsFineScrubbing) SCRUB_SEEK_INTERVAL_FINE_MS else SCRUB_SEEK_INTERVAL_NORMAL_MS)) {
-                mLastSeekTime = now
+            if (mIsFineScrubbing) {
+                // Fine scrub: skip the throttle entirely. The user is moving
+                // slowly enough that ExoPlayer's seek queue can keep up, and
+                // any throttle ends up dropping intermediate frames the user
+                // is trying to see. Re-affirm EXACT seek params on every
+                // seek so a mid-drag mode change always takes effect.
+                mExoPlayer?.setSeekParameters(SeekParameters.EXACT)
                 mExoPlayer?.seekTo(milliseconds)
+                mScrubFlushHandler.removeCallbacks(mScrubFlushRunnable)
                 mPendingScrubTarget = -1L
-                mScrubFlushHandler.removeCallbacks(mScrubFlushRunnable)
             } else {
-                // Schedule a tail seek so the final position lands even if
-                // the user stops dragging without crossing the threshold.
-                mScrubFlushHandler.removeCallbacks(mScrubFlushRunnable)
-                mScrubFlushHandler.postDelayed(
-                    mScrubFlushRunnable,
-                    (if (mIsFineScrubbing) SCRUB_SEEK_INTERVAL_FINE_MS else SCRUB_SEEK_INTERVAL_NORMAL_MS) - (now - mLastSeekTime)
-                )
+                // Normal scrub: throttle so the keyframe-snap renderer has
+                // time to display each frame.
+                val now = android.os.SystemClock.elapsedRealtime()
+                mPendingScrubTarget = milliseconds
+                if (now - mLastSeekTime >= SCRUB_SEEK_INTERVAL_NORMAL_MS) {
+                    mLastSeekTime = now
+                    mExoPlayer?.seekTo(milliseconds)
+                    mPendingScrubTarget = -1L
+                    mScrubFlushHandler.removeCallbacks(mScrubFlushRunnable)
+                } else {
+                    mScrubFlushHandler.removeCallbacks(mScrubFlushRunnable)
+                    mScrubFlushHandler.postDelayed(
+                        mScrubFlushRunnable,
+                        SCRUB_SEEK_INTERVAL_NORMAL_MS - (now - mLastSeekTime)
+                    )
+                }
             }
         } else {
             mExoPlayer?.seekTo(milliseconds)
@@ -1023,6 +1033,9 @@ class VideoFragment : ViewPagerFragment(), TextureView.SurfaceTextureListener,
             pauseVideo()
         }
     }
+
+    /** Public accessor so the activity can gate PiP entry on actual playback. */
+    fun isCurrentlyPlaying(): Boolean = mIsPlaying
 
     /**
      * Force the player to stop and release. Called by ViewPagerActivity in

@@ -260,7 +260,22 @@ class VideoTrimActivity : SimpleActivity() {
             // Same belt-and-suspenders the vault restore uses: force the
             // filesystem mtime so apps that rank by file time match those
             // that read MediaStore DATE_TAKEN.
+            //
+            // Also push DATE_TAKEN / DATE_MODIFIED / DATE_ADDED AGAIN in a
+            // separate update AFTER IS_PENDING flips — on some Android
+            // builds MediaStore resets these to "now" during the IS_PENDING
+            // -> 0 transition, which is why the trimmed clip kept landing
+            // at the top of the day.
             if (sourceDate > 0L) {
+                try {
+                    val dateUpdate = ContentValues().apply {
+                        put(MediaStore.MediaColumns.DATE_TAKEN, sourceDate)
+                        put(MediaStore.MediaColumns.DATE_MODIFIED, sourceDate / 1000L)
+                        put(MediaStore.MediaColumns.DATE_ADDED, sourceDate / 1000L)
+                    }
+                    resolver.update(uri, dateUpdate, null, null)
+                } catch (_: Exception) {
+                }
                 try {
                     val proj = arrayOf(MediaStore.MediaColumns.DATA)
                     resolver.query(uri, proj, null, null, null)?.use { c ->
@@ -268,6 +283,13 @@ class VideoTrimActivity : SimpleActivity() {
                             val path = c.getString(0)
                             if (!path.isNullOrEmpty()) {
                                 File(path).setLastModified(sourceDate)
+                                // Trigger a MediaScanner rescan so Fossify's
+                                // next directory load picks up the file with
+                                // the corrected dates instead of whatever
+                                // MediaStore inserted initially.
+                                android.media.MediaScannerConnection.scanFile(
+                                    applicationContext, arrayOf(path), null, null
+                                )
                             }
                         }
                     }
