@@ -56,6 +56,15 @@
         android:layout_height="match_parent" />
 
     <ImageView
+        android:id="@+id/scrub_preview"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="@android:color/black"
+        android:elevation="6dp"
+        android:scaleType="fitCenter"
+        android:visibility="gone" />
+
+    <ImageView
         android:id="@+id/video_play_outline"
         android:layout_width="@dimen/play_outline_size_big"
         android:layout_height="@dimen/play_outline_size_big"
