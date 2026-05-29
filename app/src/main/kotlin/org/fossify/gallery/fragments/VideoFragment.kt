@@ -140,6 +140,7 @@ class VideoFragment : ViewPagerFragment(), TextureView.SurfaceTextureListener,
     // decode-from-keyframe-per-seek.
     private var mScrubSavedVolume: Float = 1f
     private var mScrubSavedPlayWhenReady: Boolean = false
+    private var mScrubSavedRepeatMode: Int = Player.REPEAT_MODE_OFF
 
     // Chase-style seek coalescing — one outstanding seek at a time.
     // While scrubbing, each finger move updates mPendingScrubTarget;
@@ -166,9 +167,19 @@ class VideoFragment : ViewPagerFragment(), TextureView.SurfaceTextureListener,
 
     private fun fireScrubSeek(target: Long) {
         val player = mExoPlayer ?: return
+        // Clamp to the valid range — seeking past duration can put the
+        // player into a STATE_ENDED that races the auto-loop and has
+        // caused crashes on at least some devices.
+        val safeTarget = if (mDuration > 1L) target.coerceIn(0L, mDuration - 1L)
+        else target.coerceAtLeast(0L)
         mScrubSeekInFlight = true
         mLastSeekTime = android.os.SystemClock.elapsedRealtime()
-        player.seekTo(target)
+        try {
+            player.seekTo(safeTarget)
+        } catch (_: Exception) {
+            mScrubSeekInFlight = false
+            return
+        }
         mScrubFlushHandler.removeCallbacks(mScrubSeekTimeoutRunnable)
         mScrubFlushHandler.postDelayed(mScrubSeekTimeoutRunnable, 250L)
     }
@@ -663,8 +674,14 @@ class VideoFragment : ViewPagerFragment(), TextureView.SurfaceTextureListener,
             ) {
                 // Reset progress views when video loops.
                 if (reason == Player.DISCONTINUITY_REASON_AUTO_TRANSITION) {
-                    mSeekBar.progress = 0
-                    mCurrTimeView.text = 0.getFormattedDuration()
+                    // The loop fired naturally. Don't yank the seekbar to
+                    // 0 while the user is actively dragging — they're
+                    // controlling it, and the bar fighting back makes the
+                    // scrub feel broken / can race the chase.
+                    if (!mIsDragged) {
+                        mSeekBar.progress = 0
+                        mCurrTimeView.text = 0.getFormattedDuration()
+                    }
                 }
                 // Chase: the just-finished discontinuity was our scrub
                 // seek. If the user's finger moved since we issued it,
@@ -888,8 +905,14 @@ class VideoFragment : ViewPagerFragment(), TextureView.SurfaceTextureListener,
         // saw. Saving the prior state so onStopTrackingTouch can restore.
         mScrubSavedPlayWhenReady = player.playWhenReady
         mScrubSavedVolume = player.volume
+        mScrubSavedRepeatMode = player.repeatMode
         player.volume = 0f
         player.playWhenReady = true
+        // Disable looping while scrubbing — otherwise scrubbing to the
+        // last frame triggers an auto-loop back to 0 right after each
+        // seek, the seekbar fights the user, and the chase pattern can
+        // get stuck oscillating between end-of-stream and the target.
+        player.repeatMode = Player.REPEAT_MODE_OFF
         player.setSeekParameters(SeekParameters.CLOSEST_SYNC)
         // Any pending watchdog/nudge from the previous drag would fire
         // mid-this-drag and disrupt — kill them up front.
@@ -929,6 +952,7 @@ class VideoFragment : ViewPagerFragment(), TextureView.SurfaceTextureListener,
         // grabbed the scrub bar.
         mExoPlayer!!.volume = mScrubSavedVolume
         mExoPlayer!!.playWhenReady = if (mIsPlaying) true else mScrubSavedPlayWhenReady
+        mExoPlayer!!.repeatMode = mScrubSavedRepeatMode
 
         mScrubFlushHandler.removeCallbacks(mScrubSeekTimeoutRunnable)
         mScrubSeekInFlight = false
