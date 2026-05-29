@@ -616,7 +616,7 @@ class Config(context: Context) : BaseConfig(context) {
         set(value) = prefs.edit().putBoolean(ENABLE_PIP, value).apply()
 
     var prefetchScrubThumbnails: Boolean
-        get() = prefs.getBoolean(PREFETCH_SCRUB_THUMBS, true)
+        get() = prefs.getBoolean(PREFETCH_SCRUB_THUMBS, false)
         set(value) = prefs.edit().putBoolean(PREFETCH_SCRUB_THUMBS, value).apply()
 
     var hiddenFromAllFolders: MutableSet<String>
