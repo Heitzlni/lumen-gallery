@@ -311,6 +311,9 @@
     <string name="prefetch_scrub_done">Cached previews for %1$d videos.</string>
     <string name="prefetch_scrub_cancelled">Pre-cache cancelled (%1$d done).</string>
     <string name="prefetch_scrub_cancelling">Cancelling pre-cache…</string>
+    <string name="prefetch_scrub_cache_clear">Clear cached scrub previews</string>
+    <string name="prefetch_scrub_cache_clear_confirm">Delete all cached scrub previews from disk?</string>
+    <string name="prefetch_scrub_cache_cleared">Cleared %1$d cached preview directories.</string>
     <!-- Hide-from-Show-All -->
     <string name="hide_from_all">Hide from Show All</string>
     <string name="show_in_all">Show in Show All</string>

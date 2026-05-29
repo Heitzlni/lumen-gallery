@@ -72,6 +72,7 @@ class SettingsActivity : SimpleActivity() {
         setupPictureInPicture()
         setupPrefetchScrub()
         setupScrubCacheNow()
+        setupClearScrubCache()
         setupOpenVideosOnSeparateScreen()
         setupOnVideoTap()
         setupMaxBrightness()
@@ -453,6 +454,34 @@ class SettingsActivity : SimpleActivity() {
             runOnUiThread {
                 binding.settingsScrubCacheStatus.text =
                     getString(R.string.prefetch_scrub_pending, pending)
+            }
+        }
+    }
+
+    private fun setupClearScrubCache() {
+        binding.settingsClearScrubCacheHolder.setOnClickListener {
+            org.fossify.commons.dialogs.ConfirmationDialog(
+                this,
+                getString(R.string.prefetch_scrub_cache_clear_confirm)
+            ) {
+                org.fossify.commons.helpers.ensureBackgroundThread {
+                    val dir = java.io.File(applicationContext.cacheDir, "scrub_thumbs")
+                    var removed = 0
+                    if (dir.isDirectory) {
+                        dir.listFiles()?.forEach { sub ->
+                            if (sub.isDirectory) {
+                                sub.listFiles()?.forEach { it.delete() }
+                                if (sub.delete()) removed++
+                            } else if (sub.delete()) {
+                                removed++
+                            }
+                        }
+                    }
+                    runOnUiThread {
+                        toast(getString(R.string.prefetch_scrub_cache_cleared, removed))
+                        refreshScrubCacheStatus()
+                    }
+                }
             }
         }
     }
