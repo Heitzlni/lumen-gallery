@@ -8,7 +8,11 @@ import org.fossify.gallery.models.ImageLabel
 
 @Dao
 interface ImageLabelDao {
-    @Query("SELECT DISTINCT media_path FROM image_labels WHERE label LIKE :pattern ORDER BY confidence DESC")
+    // SELECT DISTINCT + ORDER BY on a non-selected column was producing
+    // empty results on some SQLite versions even when labels matched.
+    // Removed the ORDER BY — for search filtering we don't need ranked
+    // confidence, just whether each path matches at all.
+    @Query("SELECT DISTINCT media_path FROM image_labels WHERE label LIKE :pattern")
     fun pathsMatching(pattern: String): List<String>
 
     @Query("SELECT * FROM image_labels WHERE media_path = :path")

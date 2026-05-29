@@ -130,7 +130,12 @@ class SearchActivity : SimpleActivity(), MediaOperationsListener {
                 val grouped = MediaFetcher(applicationContext).groupMedia(filtered as ArrayList<Medium>, "")
                 runOnUiThread {
                     if (grouped.isEmpty()) {
-                        binding.searchEmptyTextPlaceholder.text = getString(org.fossify.commons.R.string.no_items_found)
+                        // Diagnostic line included while we figure out why
+                        // the search isn't matching — shows whether the DAO
+                        // is returning paths and whether mAllMedia is loaded.
+                        val baseMsg = getString(org.fossify.commons.R.string.no_items_found)
+                        binding.searchEmptyTextPlaceholder.text =
+                            "$baseMsg\n\n[debug] media=${mAllMedia.size} labelPaths=${labelPaths.size} labelNames=${labelFilenames.size}"
                         binding.searchEmptyTextPlaceholder.beVisible()
                     } else {
                         binding.searchEmptyTextPlaceholder.beGone()
