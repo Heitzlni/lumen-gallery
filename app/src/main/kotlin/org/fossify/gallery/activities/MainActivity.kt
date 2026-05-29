@@ -297,6 +297,18 @@ class MainActivity : SimpleActivity(), DirectoryOperationsListener {
 
         refreshMenuItems()
 
+        // Pre-cache scrub thumbnails for videos in the background while the
+        // user is browsing — by the time they tap a video, the strip is
+        // already on disk and scrubbing is instant. Defer slightly so it
+        // doesn't race with the initial gallery load.
+        if (config.prefetchScrubThumbnails &&
+            !org.fossify.gallery.helpers.ScrubPrefetcher.isRunning
+        ) {
+            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                org.fossify.gallery.helpers.ScrubPrefetcher.prefetchAll(applicationContext)
+            }, 1500L)
+        }
+
         if (mStoredAnimateGifs != config.animateGifs) {
             getRecyclerAdapter()?.updateAnimateGifs(config.animateGifs)
         }

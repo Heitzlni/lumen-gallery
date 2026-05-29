@@ -302,6 +302,15 @@
     <!-- Video player scrub -->
     <string name="scrub_speed_label">%1$.2fx scrub</string>
     <string name="picture_in_picture">Picture-in-Picture for videos</string>
+    <!-- Scrub thumbnail prefetch -->
+    <string name="prefetch_scrub_thumbnails">Pre-cache video scrub previews</string>
+    <string name="prefetch_scrub_cache_now">Cache scrub previews now</string>
+    <string name="prefetch_scrub_pending">%1$d videos waiting to be cached</string>
+    <string name="prefetch_scrub_progress">Caching: %1$d / %2$d</string>
+    <string name="prefetch_scrub_started">Pre-cache started in background…</string>
+    <string name="prefetch_scrub_done">Cached previews for %1$d videos.</string>
+    <string name="prefetch_scrub_cancelled">Pre-cache cancelled (%1$d done).</string>
+    <string name="prefetch_scrub_cancelling">Cancelling pre-cache…</string>
     <!-- Hide-from-Show-All -->
     <string name="hide_from_all">Hide from Show All</string>
     <string name="show_in_all">Show in Show All</string>
