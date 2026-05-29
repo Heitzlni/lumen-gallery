@@ -141,6 +141,15 @@ class VideoFragment : ViewPagerFragment(), TextureView.SurfaceTextureListener,
     private var mScrubSavedVolume: Float = 1f
     private var mScrubSavedPlayWhenReady: Boolean = false
 
+    // Chase-style seek coalescing — one outstanding seek at a time.
+    // While scrubbing, each finger move updates mPendingScrubTarget;
+    // we only call seekTo() if no seek is in flight. The Player.Listener
+    // onPositionDiscontinuity (reason=SEEK) clears the in-flight flag and
+    // fires the next seek if the target has moved. Avoids spamming the
+    // decoder with mid-seek cancellations that leave a stale frame on
+    // screen while the next seek is starting.
+    private var mScrubSeekInFlight = false
+
     // Pre-extracted thumbnails for instant scrub preview — ExoPlayer's
     // real-time decode is hardware-limited (~5–20 fps for EXACT seek), so
     // for smooth scrubbing we show the nearest cached frame from this
@@ -634,6 +643,21 @@ class VideoFragment : ViewPagerFragment(), TextureView.SurfaceTextureListener,
                     mSeekBar.progress = 0
                     mCurrTimeView.text = 0.getFormattedDuration()
                 }
+                // Chase: the just-finished discontinuity was our scrub
+                // seek. If the user's finger moved since we issued it,
+                // immediately fire the next seek to catch up. Otherwise
+                // clear the in-flight flag so the next finger move can
+                // seek directly.
+                if (reason == Player.DISCONTINUITY_REASON_SEEK && mScrubSeekInFlight) {
+                    val pending = mPendingScrubTarget
+                    val player = mExoPlayer
+                    if (player != null && mIsDragged && pending >= 0L && pending != newPosition.positionMs) {
+                        player.seekTo(pending)
+                        // mScrubSeekInFlight stays true — the new seek is in flight now.
+                    } else {
+                        mScrubSeekInFlight = false
+                    }
+                }
             }
 
             override fun onPlaybackStateChanged(@Player.State playbackState: Int) {
@@ -845,6 +869,8 @@ class VideoFragment : ViewPagerFragment(), TextureView.SurfaceTextureListener,
         player.volume = 0f
         player.playWhenReady = true
         player.setSeekParameters(SeekParameters.CLOSEST_SYNC)
+        mScrubSeekInFlight = false
+        mPendingScrubTarget = -1L
         mIsDragged = true
     }
 
@@ -878,6 +904,7 @@ class VideoFragment : ViewPagerFragment(), TextureView.SurfaceTextureListener,
         mExoPlayer!!.volume = mScrubSavedVolume
         mExoPlayer!!.playWhenReady = if (mIsPlaying) true else mScrubSavedPlayWhenReady
 
+        mScrubSeekInFlight = false
         mIsDragged = false
     }
 
@@ -983,21 +1010,18 @@ class VideoFragment : ViewPagerFragment(), TextureView.SurfaceTextureListener,
         }
 
         if (mIsDragged) {
-            // The player is rolling (muted) for the duration of the drag,
-            // so frames keep flowing to the surface at decoder speed. Each
-            // seekTo just teleports the position; the decoder keeps
-            // rendering. No thumbnail overlay during scrub — the user sees
-            // the real high-res surface, which is what they actually want.
-            // Throttle the seeks so we don't drown the decoder queue.
+            // Chase pattern: keep the latest target, but only fire seekTo
+            // if no previous seek is still in flight. When the in-flight
+            // seek completes (Player.Listener.onPositionDiscontinuity), we
+            // chase to whatever the target moved to in the meantime. This
+            // matches what real video players do — no queue, no
+            // mid-decode cancels, the rendered frame tracks the finger
+            // instead of lagging behind it.
             mPendingScrubTarget = milliseconds
-            val now = android.os.SystemClock.elapsedRealtime()
-            if (now - mLastSeekTime >= 30L) {
-                mLastSeekTime = now
-                mExoPlayer?.seekTo(milliseconds)
-            } else {
-                // Tail-flush so the final position lands even between throttle ticks.
-                mScrubFlushHandler.removeCallbacks(mScrubFlushRunnable)
-                mScrubFlushHandler.postDelayed(mScrubFlushRunnable, 30L - (now - mLastSeekTime))
+            val player = mExoPlayer
+            if (player != null && !mScrubSeekInFlight) {
+                mScrubSeekInFlight = true
+                player.seekTo(milliseconds)
             }
         } else {
             mExoPlayer?.seekTo(milliseconds)
