@@ -690,20 +690,10 @@ class VideoFragment : ViewPagerFragment(), TextureView.SurfaceTextureListener,
                         mCurrTimeView.text = 0.getFormattedDuration()
                     }
                 }
-                // Chase: the just-finished discontinuity was our scrub
-                // seek. If the user's finger moved since we issued it,
-                // immediately fire the next seek to catch up. Otherwise
-                // clear the in-flight flag so the next finger move can
-                // seek directly.
-                if (reason == Player.DISCONTINUITY_REASON_SEEK && mScrubSeekInFlight) {
-                    mScrubFlushHandler.removeCallbacks(mScrubSeekTimeoutRunnable)
-                    val pending = mPendingScrubTarget
-                    if (mExoPlayer != null && mIsDragged && pending >= 0L && pending != newPosition.positionMs) {
-                        fireScrubSeek(pending)
-                    } else {
-                        mScrubSeekInFlight = false
-                    }
-                }
+                // (Chase pattern removed in v6.8 — was triggering a
+                // codec stop/release/restart storm on some hardware
+                // decoders and ANRing the app. Now we just time-throttle
+                // scrub seeks in setPosition().)
             }
 
             override fun onPlaybackStateChanged(@Player.State playbackState: Int) {
@@ -903,27 +893,18 @@ class VideoFragment : ViewPagerFragment(), TextureView.SurfaceTextureListener,
     override fun onStartTrackingTouch(seekBar: SeekBar) {
         val player = mExoPlayer ?: return
 
-        // Trick that actual video players use to get smooth scrub frames:
-        // keep the decoder pipeline ALIVE during the drag (playWhenReady =
-        // true) but muted, so frames continuously flow to the surface as
-        // the user moves. Previously we set playWhenReady = false on drag,
-        // which made ExoPlayer pause after each seek and only render a
-        // single frame per seekTo — that's the ~2 fps scrubbing the user
-        // saw. Saving the prior state so onStopTrackingTouch can restore.
-        mScrubSavedPlayWhenReady = player.playWhenReady
-        mScrubSavedVolume = player.volume
-        player.volume = 0f
-        player.playWhenReady = true
-        // Don't touch repeat mode — toggling it at end-of-stream was
-        // triggering a re-prep storm that ANR'd the UI. The scrub-end
-        // safety clamp (fireScrubSeek) keeps the player well clear of
-        // duration so the loop never races us anyway.
+        // We tried keeping the player playing (muted) during scrub for
+        // "live" decode, but on MediaTek hardware decoders the rapid seek
+        // storm triggered a stop/release/restart cycle every ~15ms which
+        // ate the binder/IPC layer that responds to touch events and ANRd
+        // the app. Back to paused-during-scrub. Each seek decodes ONE
+        // frame to the surface. We time-throttle seeks to 100 ms so we
+        // don't overwhelm the codec.
+        player.playWhenReady = false
         player.setSeekParameters(SeekParameters.CLOSEST_SYNC)
-        // Any pending watchdog/nudge from the previous drag would fire
-        // mid-this-drag and disrupt — kill them up front.
-        mScrubFlushHandler.removeCallbacks(mScrubSeekTimeoutRunnable)
+        // Kill any pending watchdog/runnable from the previous drag.
         mScrubFlushHandler.removeCallbacksAndMessages(null)
-        mScrubSeekInFlight = false
+        mLastSeekTime = 0L
         mPendingScrubTarget = -1L
         mIsDragged = true
     }
@@ -939,14 +920,12 @@ class VideoFragment : ViewPagerFragment(), TextureView.SurfaceTextureListener,
         }
 
         mExoPlayer!!.setSeekParameters(SeekParameters.EXACT)
-        mScrubFlushHandler.removeCallbacks(mScrubFlushRunnable)
-        // Re-seek precisely to the visible scrubber position so the displayed
-        // frame matches where the user released, not whichever throttled seek
-        // happened last.
+        mScrubFlushHandler.removeCallbacksAndMessages(null)
+        // Re-seek precisely to the visible scrubber position. Clamp away
+        // from duration so we never land on end-of-stream (that's been
+        // what crashed the player).
         val rawTarget =
             if (mPendingScrubTarget >= 0L) mPendingScrubTarget else mSeekBar.progress.toLong()
-        // Same safety clamp as fireScrubSeek — never land exactly at
-        // duration, which is what was crashing the player.
         val maxSafe = (mDuration - SCRUB_END_SAFETY_MS).coerceAtLeast(0L)
         val finalTarget = rawTarget.coerceIn(0L, maxSafe)
         mPendingScrubTarget = -1L
@@ -954,24 +933,16 @@ class VideoFragment : ViewPagerFragment(), TextureView.SurfaceTextureListener,
             mExoPlayer!!.seekTo(finalTarget)
         } catch (_: Exception) {
         }
-        // Hide the thumbnail overlay only AFTER ExoPlayer has had a moment
-        // to decode the target frame — otherwise the overlay disappears
-        // and the user briefly sees the pre-seek (stale) video frame.
+        // Hide the thumbnail overlay shortly after the final seek so the
+        // user briefly sees the overlay, then the real ExoPlayer-decoded
+        // frame.
         mScrubFlushHandler.postDelayed({ hideScrubThumbnail() }, 150L)
 
-        // Restore volume + play state that was in effect before the drag.
-        // mIsPlaying reflects whether the user wanted playback before they
-        // grabbed the scrub bar.
-        mExoPlayer!!.volume = mScrubSavedVolume
-        mExoPlayer!!.playWhenReady = if (mIsPlaying) true else mScrubSavedPlayWhenReady
+        if (mIsPlaying) {
+            mExoPlayer!!.playWhenReady = true
+        }
 
-        mScrubFlushHandler.removeCallbacks(mScrubSeekTimeoutRunnable)
-        mScrubSeekInFlight = false
         mIsDragged = false
-        // Removed the post-release "nudge" seek that was firing 100ms
-        // after release — it was making the end-of-stream race worse
-        // and the scrub safety clamp means we never land exactly at
-        // duration so the decoder doesn't get stuck anymore.
     }
 
     private fun togglePlayPause() {
@@ -1076,16 +1047,26 @@ class VideoFragment : ViewPagerFragment(), TextureView.SurfaceTextureListener,
         }
 
         if (mIsDragged) {
-            // Chase pattern: keep the latest target, but only fire seekTo
-            // if no previous seek is still in flight. When the in-flight
-            // seek completes (Player.Listener.onPositionDiscontinuity), we
-            // chase to whatever the target moved to in the meantime. This
-            // matches what real video players do — no queue, no
-            // mid-decode cancels, the rendered frame tracks the finger
-            // instead of lagging behind it.
+            // Show the nearest pre-extracted scrub thumbnail on the
+            // overlay for instant visual feedback, and fire one ExoPlayer
+            // seek at most every 100ms so the codec has time between
+            // requests. The auto-hide pulls the overlay off 200ms after
+            // the last move so the real ExoPlayer-decoded frame peeks
+            // through when the finger pauses.
+            showScrubThumbnailAt(milliseconds)
             mPendingScrubTarget = milliseconds
-            if (mExoPlayer != null && !mScrubSeekInFlight) {
-                fireScrubSeek(milliseconds)
+            val now = android.os.SystemClock.elapsedRealtime()
+            val timeSinceLast = now - mLastSeekTime
+            val throttleMs = 100L
+            if (timeSinceLast >= throttleMs) {
+                mLastSeekTime = now
+                try { mExoPlayer?.seekTo(milliseconds) } catch (_: Exception) {}
+            } else {
+                mScrubFlushHandler.removeCallbacks(mScrubFlushRunnable)
+                mScrubFlushHandler.postDelayed(
+                    mScrubFlushRunnable,
+                    throttleMs - timeSinceLast
+                )
             }
         } else {
             mExoPlayer?.seekTo(milliseconds)
@@ -1095,9 +1076,8 @@ class VideoFragment : ViewPagerFragment(), TextureView.SurfaceTextureListener,
     private fun flushPendingScrub() {
         val target = mPendingScrubTarget
         if (target >= 0L) {
-            mPendingScrubTarget = -1L
             mLastSeekTime = android.os.SystemClock.elapsedRealtime()
-            mExoPlayer?.seekTo(target)
+            try { mExoPlayer?.seekTo(target) } catch (_: Exception) {}
         }
     }
 
