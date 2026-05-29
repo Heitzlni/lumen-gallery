@@ -891,6 +891,10 @@ class VideoFragment : ViewPagerFragment(), TextureView.SurfaceTextureListener,
         player.volume = 0f
         player.playWhenReady = true
         player.setSeekParameters(SeekParameters.CLOSEST_SYNC)
+        // Any pending watchdog/nudge from the previous drag would fire
+        // mid-this-drag and disrupt — kill them up front.
+        mScrubFlushHandler.removeCallbacks(mScrubSeekTimeoutRunnable)
+        mScrubFlushHandler.removeCallbacksAndMessages(null)
         mScrubSeekInFlight = false
         mPendingScrubTarget = -1L
         mIsDragged = true

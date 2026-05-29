@@ -73,6 +73,14 @@ class FineScrubSeekBar @JvmOverloads constructor(
                     else -> 0.05f
                 }
                 if (newScale != currentScale) {
+                    // Rebase: scale just changed. If we kept startProgress +
+                    // downX from the original touch-down, the same rawDx
+                    // would re-multiply by the new scale and the bar would
+                    // jump to a different position. Reset the reference
+                    // point to NOW so subsequent movement uses the new
+                    // scale relative to the current position.
+                    startProgress = progress
+                    downX = event.x
                     currentScale = newScale
                     fineModeListener?.invoke(newScale)
                 }
