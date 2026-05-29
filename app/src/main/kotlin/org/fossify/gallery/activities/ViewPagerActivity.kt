@@ -1546,7 +1546,7 @@ class ViewPagerActivity : BaseViewerActivity(), ViewPager.OnPageChangeListener, 
     // so the controls don't vanish mid-drag.
     private val mChromeAutoHideHandler = android.os.Handler(android.os.Looper.getMainLooper())
     private val mChromeAutoHideRunnable = Runnable { tryAutoHideChrome() }
-    private val CHROME_AUTOHIDE_DELAY_MS = 7000L
+    private val CHROME_AUTOHIDE_DELAY_MS = 4500L
 
     private fun tryAutoHideChrome() {
         if (mIsFullScreen) return
