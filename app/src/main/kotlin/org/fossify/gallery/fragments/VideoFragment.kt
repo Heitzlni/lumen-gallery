@@ -134,6 +134,13 @@ class VideoFragment : ViewPagerFragment(), TextureView.SurfaceTextureListener,
     private val mScrubFlushHandler = Handler(android.os.Looper.getMainLooper())
     private val mScrubFlushRunnable = Runnable { flushPendingScrub() }
 
+    // Saved player state for the "keep playing muted while scrubbing"
+    // technique — the decoder pipeline stays warm and renders frames
+    // continuously to the real surface as the user scrubs, instead of
+    // decode-from-keyframe-per-seek.
+    private var mScrubSavedVolume: Float = 1f
+    private var mScrubSavedPlayWhenReady: Boolean = false
+
     // Pre-extracted thumbnails for instant scrub preview — ExoPlayer's
     // real-time decode is hardware-limited (~5–20 fps for EXACT seek), so
     // for smooth scrubbing we show the nearest cached frame from this
@@ -824,12 +831,20 @@ class VideoFragment : ViewPagerFragment(), TextureView.SurfaceTextureListener,
     }
 
     override fun onStartTrackingTouch(seekBar: SeekBar) {
-        if (mExoPlayer == null) {
-            return
-        }
+        val player = mExoPlayer ?: return
 
-        mExoPlayer!!.playWhenReady = false
-        mExoPlayer!!.setSeekParameters(SeekParameters.CLOSEST_SYNC)
+        // Trick that actual video players use to get smooth scrub frames:
+        // keep the decoder pipeline ALIVE during the drag (playWhenReady =
+        // true) but muted, so frames continuously flow to the surface as
+        // the user moves. Previously we set playWhenReady = false on drag,
+        // which made ExoPlayer pause after each seek and only render a
+        // single frame per seekTo — that's the ~2 fps scrubbing the user
+        // saw. Saving the prior state so onStopTrackingTouch can restore.
+        mScrubSavedPlayWhenReady = player.playWhenReady
+        mScrubSavedVolume = player.volume
+        player.volume = 0f
+        player.playWhenReady = true
+        player.setSeekParameters(SeekParameters.CLOSEST_SYNC)
         mIsDragged = true
     }
 
@@ -857,9 +872,11 @@ class VideoFragment : ViewPagerFragment(), TextureView.SurfaceTextureListener,
         // and the user briefly sees the pre-seek (stale) video frame.
         mScrubFlushHandler.postDelayed({ hideScrubThumbnail() }, 150L)
 
-        if (mIsPlaying) {
-            mExoPlayer!!.playWhenReady = true
-        }
+        // Restore volume + play state that was in effect before the drag.
+        // mIsPlaying reflects whether the user wanted playback before they
+        // grabbed the scrub bar.
+        mExoPlayer!!.volume = mScrubSavedVolume
+        mExoPlayer!!.playWhenReady = if (mIsPlaying) true else mScrubSavedPlayWhenReady
 
         mIsDragged = false
     }
@@ -966,23 +983,21 @@ class VideoFragment : ViewPagerFragment(), TextureView.SurfaceTextureListener,
         }
 
         if (mIsDragged) {
-            // Two-layer scrubbing:
-            //   - Overlay shows the nearest pre-extracted thumbnail (instant
-            //     visual feedback regardless of decoder speed). Auto-hides
-            //     ~200 ms after the last move so when the user slows or
-            //     stops the high-res ExoPlayer surface shows through.
-            //   - ExoPlayer.seekTo runs in parallel (CLOSEST_SYNC + 50 ms
-            //     throttle) so the real surface catches up as fast as the
-            //     hardware decoder allows — and is correct by the time the
-            //     overlay fades. ExoPlayer auto-coalesces rapid seeks.
-            showScrubThumbnailAt(milliseconds)
+            // The player is rolling (muted) for the duration of the drag,
+            // so frames keep flowing to the surface at decoder speed. Each
+            // seekTo just teleports the position; the decoder keeps
+            // rendering. No thumbnail overlay during scrub — the user sees
+            // the real high-res surface, which is what they actually want.
+            // Throttle the seeks so we don't drown the decoder queue.
             mPendingScrubTarget = milliseconds
-
             val now = android.os.SystemClock.elapsedRealtime()
-            if (now - mLastSeekTime >= 50L) {
+            if (now - mLastSeekTime >= 30L) {
                 mLastSeekTime = now
-                mExoPlayer?.setSeekParameters(SeekParameters.CLOSEST_SYNC)
                 mExoPlayer?.seekTo(milliseconds)
+            } else {
+                // Tail-flush so the final position lands even between throttle ticks.
+                mScrubFlushHandler.removeCallbacks(mScrubFlushRunnable)
+                mScrubFlushHandler.postDelayed(mScrubFlushRunnable, 30L - (now - mLastSeekTime))
             }
         } else {
             mExoPlayer?.seekTo(milliseconds)
