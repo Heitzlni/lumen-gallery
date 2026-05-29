@@ -142,7 +142,7 @@ class VideoFragment : ViewPagerFragment(), TextureView.SurfaceTextureListener,
     // Thumbnails are persisted to disk (per video file path + size + mtime)
     // so a re-open of the same video is instant — matches Google Photos.
     private val SCRUB_THUMB_COUNT = 16
-    private val SCRUB_THUMB_MAX_DIM = 160
+    private val SCRUB_THUMB_MAX_DIM = 360
     @Volatile
     private var mScrubThumbnails: Array<android.graphics.Bitmap?>? = null
 
@@ -966,13 +966,24 @@ class VideoFragment : ViewPagerFragment(), TextureView.SurfaceTextureListener,
         }
 
         if (mIsDragged) {
-            // While dragging, we let ExoPlayer's real surface stay frozen
-            // and show the pre-extracted thumbnail strip on top instead —
-            // that gives instant frame feedback regardless of how slow the
-            // hardware decoder is. The actual ExoPlayer seek only happens
-            // when the finger releases (handled in onStopTrackingTouch).
+            // Two-layer scrubbing:
+            //   - Overlay shows the nearest pre-extracted thumbnail (instant
+            //     visual feedback regardless of decoder speed). Auto-hides
+            //     ~200 ms after the last move so when the user slows or
+            //     stops the high-res ExoPlayer surface shows through.
+            //   - ExoPlayer.seekTo runs in parallel (CLOSEST_SYNC + 50 ms
+            //     throttle) so the real surface catches up as fast as the
+            //     hardware decoder allows — and is correct by the time the
+            //     overlay fades. ExoPlayer auto-coalesces rapid seeks.
             showScrubThumbnailAt(milliseconds)
             mPendingScrubTarget = milliseconds
+
+            val now = android.os.SystemClock.elapsedRealtime()
+            if (now - mLastSeekTime >= 50L) {
+                mLastSeekTime = now
+                mExoPlayer?.setSeekParameters(SeekParameters.CLOSEST_SYNC)
+                mExoPlayer?.seekTo(milliseconds)
+            }
         } else {
             mExoPlayer?.seekTo(milliseconds)
         }
@@ -1144,9 +1155,25 @@ class VideoFragment : ViewPagerFragment(), TextureView.SurfaceTextureListener,
         if (view.visibility != android.view.View.VISIBLE) {
             view.visibility = android.view.View.VISIBLE
         }
+        // Auto-hide ~200 ms after the last move so when the user pauses
+        // their finger, ExoPlayer has time to render and the real (full-
+        // resolution) surface peeks through. New moves cancel + reschedule.
+        mOverlayAutoHideHandler.removeCallbacks(mOverlayAutoHideRunnable)
+        mOverlayAutoHideHandler.postDelayed(mOverlayAutoHideRunnable, OVERLAY_AUTO_HIDE_MS)
+    }
+
+    private val mOverlayAutoHideHandler = android.os.Handler(android.os.Looper.getMainLooper())
+    private val OVERLAY_AUTO_HIDE_MS = 200L
+    private val mOverlayAutoHideRunnable = Runnable {
+        // Only auto-hide if the user is still actively dragging — if they
+        // released, onStopTrackingTouch already scheduled the hide.
+        if (mIsDragged) {
+            try { binding.scrubPreview.visibility = android.view.View.GONE } catch (_: Exception) {}
+        }
     }
 
     private fun hideScrubThumbnail() {
+        mOverlayAutoHideHandler.removeCallbacks(mOverlayAutoHideRunnable)
         try {
             binding.scrubPreview.visibility = android.view.View.GONE
             binding.scrubPreview.setImageDrawable(null)

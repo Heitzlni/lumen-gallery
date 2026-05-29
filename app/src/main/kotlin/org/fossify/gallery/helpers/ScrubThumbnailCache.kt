@@ -21,7 +21,7 @@ import java.security.MessageDigest
 object ScrubThumbnailCache {
 
     const val COUNT = 16
-    const val MAX_DIM = 160
+    const val MAX_DIM = 360
 
     fun cacheKeyFor(path: String): String {
         val f = File(path)
