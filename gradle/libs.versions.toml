@@ -14,6 +14,7 @@ androidx-constraintlayout = "2.2.1"
 androidx-documentfile = "1.1.0"
 androidx-security-crypto = "1.1.0-alpha06"
 mlkit-image-labeling = "17.0.9"
+mlkit-text-recognition = "16.0.1"
 #exif
 exif = "1.0.1"
 #Room
@@ -56,6 +57,7 @@ androidx-print = { module = "androidx.print:print", version.ref = "androidx-prin
 androidx-documentfile = { module = "androidx.documentfile:documentfile", version.ref = "androidx-documentfile" }
 androidx-security-crypto = { module = "androidx.security:security-crypto", version.ref = "androidx-security-crypto" }
 mlkit-image-labeling = { module = "com.google.mlkit:image-labeling", version.ref = "mlkit-image-labeling" }
+mlkit-text-recognition = { module = "com.google.mlkit:text-recognition", version.ref = "mlkit-text-recognition" }
 #exif
 exif = { module = "it.sephiroth.android.exif:library", version.ref = "exif" }
 #Room

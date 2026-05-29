@@ -97,34 +97,39 @@ class SearchActivity : SimpleActivity(), MediaOperationsListener {
     private fun textChanged(text: String) {
         ensureBackgroundThread {
             try {
-                // Filename match (cheap) + label match (ML Kit). Label paths
-                // are stored as whatever MediaStore returned at index time;
-                // Fossify's Medium.path can occasionally differ in casing /
-                // symlink resolution / volume prefix, so we ALSO build a set
-                // of the bare filenames to fall back on. That fixes the bug
-                // where "Show my labels" shows lots of `sky` rows but a
-                // "sky" search returned nothing.
-                val labelPaths: Set<String>
-                val labelFilenames: Set<String>
+                // Filename match (cheap) + ML Kit label match + OCR text match.
+                // Index paths can occasionally differ in casing / symlink
+                // resolution from Medium.path, so we also expose a filename
+                // fallback set.
+                val mlPaths: Set<String>
+                val mlFilenames: Set<String>
                 if (text.isNotBlank()) {
-                    val raw = try {
-                        applicationContext.imageLabelDB
-                            .pathsMatching("%${text.lowercase()}%")
+                    val lower = text.lowercase()
+                    val labelPaths = try {
+                        applicationContext.imageLabelDB.pathsMatching("%$lower%")
                     } catch (_: Exception) {
                         emptyList()
                     }
-                    labelPaths = raw.toHashSet()
-                    labelFilenames = raw.mapTo(HashSet()) { it.substringAfterLast('/') }
+                    val textPaths = try {
+                        applicationContext.imageTextDB.pathsMatching("%$lower%")
+                    } catch (_: Exception) {
+                        emptyList()
+                    }
+                    val raw = HashSet<String>(labelPaths.size + textPaths.size)
+                    raw.addAll(labelPaths)
+                    raw.addAll(textPaths)
+                    mlPaths = raw
+                    mlFilenames = raw.mapTo(HashSet()) { it.substringAfterLast('/') }
                 } else {
-                    labelPaths = emptySet()
-                    labelFilenames = emptySet()
+                    mlPaths = emptySet()
+                    mlFilenames = emptySet()
                 }
 
                 val filtered = mAllMedia.filter {
                     if (it !is Medium) return@filter false
                     if (it.name.contains(text, true)) return@filter true
-                    if (labelPaths.contains(it.path)) return@filter true
-                    labelFilenames.contains(it.name)
+                    if (mlPaths.contains(it.path)) return@filter true
+                    mlFilenames.contains(it.name)
                 } as ArrayList
                 filtered.sortBy { it is Medium && !it.name.startsWith(text, true) }
                 val grouped = MediaFetcher(applicationContext).groupMedia(filtered as ArrayList<Medium>, "")

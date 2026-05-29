@@ -72,6 +72,7 @@ import org.fossify.gallery.extensions.emptyTheRecycleBin
 import org.fossify.gallery.extensions.favoritesDB
 import org.fossify.gallery.extensions.getFavoritePaths
 import org.fossify.gallery.extensions.imageLabelDB
+import org.fossify.gallery.extensions.imageTextDB
 import org.fossify.gallery.extensions.getCachedMedia
 import org.fossify.gallery.extensions.getHumanizedFilename
 import org.fossify.gallery.extensions.isDownloadsFolder
@@ -486,30 +487,39 @@ class MediaActivity : SimpleActivity(), MediaOperationsListener {
     private fun searchQueryChanged(text: String) {
         ensureBackgroundThread {
             try {
-                // ML-Kit label match — same logic as SearchActivity, just
-                // wired here too so the search bar in Show All / inside an
-                // album finds content-tagged photos.
-                val labelPaths: Set<String>
-                val labelFilenames: Set<String>
+                // ML-Kit label match + OCR text match. Both DAOs return paths
+                // whose label/text contain the query — we union them and also
+                // expose a filename-fallback set so albums showing relative
+                // filenames still resolve.
+                val mlPaths: Set<String>
+                val mlFilenames: Set<String>
                 if (text.isNotBlank()) {
-                    val raw = try {
-                        applicationContext.imageLabelDB
-                            .pathsMatching("%${text.lowercase()}%")
+                    val lower = text.lowercase()
+                    val labelPaths = try {
+                        applicationContext.imageLabelDB.pathsMatching("%$lower%")
                     } catch (_: Exception) {
                         emptyList()
                     }
-                    labelPaths = raw.toHashSet()
-                    labelFilenames = raw.mapTo(HashSet()) { it.substringAfterLast('/') }
+                    val textPaths = try {
+                        applicationContext.imageTextDB.pathsMatching("%$lower%")
+                    } catch (_: Exception) {
+                        emptyList()
+                    }
+                    val raw = HashSet<String>(labelPaths.size + textPaths.size)
+                    raw.addAll(labelPaths)
+                    raw.addAll(textPaths)
+                    mlPaths = raw
+                    mlFilenames = raw.mapTo(HashSet()) { it.substringAfterLast('/') }
                 } else {
-                    labelPaths = emptySet()
-                    labelFilenames = emptySet()
+                    mlPaths = emptySet()
+                    mlFilenames = emptySet()
                 }
 
                 val filtered = mMedia.filter {
                     if (it !is Medium) return@filter false
                     if (it.name.contains(text, true)) return@filter true
-                    if (labelPaths.contains(it.path)) return@filter true
-                    labelFilenames.contains(it.name)
+                    if (mlPaths.contains(it.path)) return@filter true
+                    mlFilenames.contains(it.name)
                 } as ArrayList
                 filtered.sortBy { it is Medium && !it.name.startsWith(text, true) }
                 val grouped = MediaFetcher(applicationContext).groupMedia(
