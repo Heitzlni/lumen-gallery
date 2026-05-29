@@ -369,6 +369,16 @@
     <string name="photo_content_search_clear">Clear photo content index</string>
     <string name="photo_content_search_clear_confirm">Delete all photo labels? You can re-index afterwards.</string>
     <string name="photo_content_search_cleared">Photo content index cleared.</string>
+    <string name="photo_text_search_index_now">Index text inside photos (OCR)</string>
+    <string name="photo_text_search_indexed_count">%1$d photos scanned for text</string>
+    <string name="photo_text_search_progress">Scanning text: %1$d / %2$d</string>
+    <string name="photo_text_search_started">Text scan started in background…</string>
+    <string name="photo_text_search_done">Scanned %1$d new photos for text.</string>
+    <string name="photo_text_search_cancelled">Text scan cancelled (%1$d done).</string>
+    <string name="photo_text_search_cancelling">Cancelling text scan…</string>
+    <string name="photo_text_search_clear">Clear OCR text index</string>
+    <string name="photo_text_search_clear_confirm">Delete all extracted text? You can re-scan afterwards.</string>
+    <string name="photo_text_search_cleared">OCR text index cleared.</string>
     <plurals name="vault_restore_confirm">
         <item quantity="one">Restore %d item back to your gallery and remove it from the vault?</item>
         <item quantity="other">Restore %d items back to your gallery and remove them from the vault?</item>

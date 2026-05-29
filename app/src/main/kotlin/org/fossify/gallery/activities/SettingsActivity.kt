@@ -63,6 +63,8 @@ class SettingsActivity : SimpleActivity() {
         setupIndexPhotos()
         setupShowLabels()
         setupClearIndex()
+        setupIndexTexts()
+        setupClearTexts()
         setupManageHiddenFolders()
         setupSearchAllFiles()
         setupShowHiddenItems()
@@ -303,6 +305,63 @@ class SettingsActivity : SimpleActivity() {
                     runOnUiThread {
                         toast(R.string.photo_content_search_cleared)
                         refreshIndexStatus()
+                    }
+                }
+            }
+        }
+    }
+
+    private fun setupIndexTexts() {
+        refreshTextIndexStatus()
+        binding.settingsIndexTextsHolder.setOnClickListener {
+            if (org.fossify.gallery.helpers.TextIndexer.isRunning) {
+                org.fossify.gallery.helpers.TextIndexer.cancel()
+                toast(R.string.photo_text_search_cancelling)
+                return@setOnClickListener
+            }
+            toast(R.string.photo_text_search_started)
+            org.fossify.gallery.helpers.TextIndexer.indexAll(
+                applicationContext,
+                onProgress = { current, total ->
+                    runOnUiThread {
+                        binding.settingsIndexTextsStatus.text =
+                            getString(R.string.photo_text_search_progress, current, total)
+                    }
+                },
+                onDone = { count, cancelled ->
+                    runOnUiThread {
+                        toast(
+                            if (cancelled) getString(R.string.photo_text_search_cancelled, count)
+                            else getString(R.string.photo_text_search_done, count)
+                        )
+                        refreshTextIndexStatus()
+                    }
+                },
+            )
+        }
+    }
+
+    private fun refreshTextIndexStatus() {
+        org.fossify.commons.helpers.ensureBackgroundThread {
+            val indexed = applicationContext.imageTextDB.indexedPathCount()
+            runOnUiThread {
+                binding.settingsIndexTextsStatus.text =
+                    getString(R.string.photo_text_search_indexed_count, indexed)
+            }
+        }
+    }
+
+    private fun setupClearTexts() {
+        binding.settingsClearTextsHolder.setOnClickListener {
+            org.fossify.commons.dialogs.ConfirmationDialog(
+                this,
+                getString(R.string.photo_text_search_clear_confirm)
+            ) {
+                org.fossify.commons.helpers.ensureBackgroundThread {
+                    applicationContext.imageTextDB.clearAll()
+                    runOnUiThread {
+                        toast(R.string.photo_text_search_cleared)
+                        refreshTextIndexStatus()
                     }
                 }
             }
