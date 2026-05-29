@@ -98,20 +98,33 @@ class SearchActivity : SimpleActivity(), MediaOperationsListener {
         ensureBackgroundThread {
             try {
                 // Filename match (cheap) + label match (ML Kit). Label paths
-                // come back lower-cased exact-match style, so we LIKE %text%.
-                val labelPaths: Set<String> = if (text.isNotBlank()) {
-                    try {
+                // are stored as whatever MediaStore returned at index time;
+                // Fossify's Medium.path can occasionally differ in casing /
+                // symlink resolution / volume prefix, so we ALSO build a set
+                // of the bare filenames to fall back on. That fixes the bug
+                // where "Show my labels" shows lots of `sky` rows but a
+                // "sky" search returned nothing.
+                val labelPaths: Set<String>
+                val labelFilenames: Set<String>
+                if (text.isNotBlank()) {
+                    val raw = try {
                         applicationContext.imageLabelDB
                             .pathsMatching("%${text.lowercase()}%")
-                            .toHashSet()
                     } catch (_: Exception) {
-                        emptySet()
+                        emptyList()
                     }
+                    labelPaths = raw.toHashSet()
+                    labelFilenames = raw.mapTo(HashSet()) { it.substringAfterLast('/') }
                 } else {
-                    emptySet()
+                    labelPaths = emptySet()
+                    labelFilenames = emptySet()
                 }
+
                 val filtered = mAllMedia.filter {
-                    it is Medium && (it.name.contains(text, true) || labelPaths.contains(it.path))
+                    if (it !is Medium) return@filter false
+                    if (it.name.contains(text, true)) return@filter true
+                    if (labelPaths.contains(it.path)) return@filter true
+                    labelFilenames.contains(it.name)
                 } as ArrayList
                 filtered.sortBy { it is Medium && !it.name.startsWith(text, true) }
                 val grouped = MediaFetcher(applicationContext).groupMedia(filtered as ArrayList<Medium>, "")
