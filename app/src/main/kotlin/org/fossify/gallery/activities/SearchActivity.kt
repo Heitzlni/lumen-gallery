@@ -133,12 +133,6 @@ class SearchActivity : SimpleActivity(), MediaOperationsListener {
                         binding.searchEmptyTextPlaceholder.text =
                             getString(org.fossify.commons.R.string.no_items_found)
                         binding.searchEmptyTextPlaceholder.beVisible()
-                        // Toast the diagnostic so it's impossible to miss —
-                        // tells us why the search returned nothing.
-                        toast(
-                            "media=${mAllMedia.size} labelPaths=${labelPaths.size} labelNames=${labelFilenames.size}",
-                            android.widget.Toast.LENGTH_LONG
-                        )
                     } else {
                         binding.searchEmptyTextPlaceholder.beGone()
                     }
