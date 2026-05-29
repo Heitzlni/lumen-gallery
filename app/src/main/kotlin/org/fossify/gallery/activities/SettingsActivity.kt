@@ -70,6 +70,8 @@ class SettingsActivity : SimpleActivity() {
         setupRememberLastVideo()
         setupLoopVideos()
         setupPictureInPicture()
+        setupPrefetchScrub()
+        setupScrubCacheNow()
         setupOpenVideosOnSeparateScreen()
         setupOnVideoTap()
         setupMaxBrightness()
@@ -404,6 +406,54 @@ class SettingsActivity : SimpleActivity() {
         binding.settingsPictureInPictureHolder.setOnClickListener {
             binding.settingsPictureInPicture.toggle()
             config.enablePictureInPicture = binding.settingsPictureInPicture.isChecked
+        }
+    }
+
+    private fun setupPrefetchScrub() {
+        binding.settingsPrefetchScrub.isChecked = config.prefetchScrubThumbnails
+        binding.settingsPrefetchScrubHolder.setOnClickListener {
+            binding.settingsPrefetchScrub.toggle()
+            config.prefetchScrubThumbnails = binding.settingsPrefetchScrub.isChecked
+        }
+    }
+
+    private fun setupScrubCacheNow() {
+        refreshScrubCacheStatus()
+        binding.settingsScrubCacheNowHolder.setOnClickListener {
+            if (org.fossify.gallery.helpers.ScrubPrefetcher.isRunning) {
+                org.fossify.gallery.helpers.ScrubPrefetcher.cancel()
+                toast(R.string.prefetch_scrub_cancelling)
+                return@setOnClickListener
+            }
+            toast(R.string.prefetch_scrub_started)
+            org.fossify.gallery.helpers.ScrubPrefetcher.prefetchAll(
+                applicationContext,
+                onProgress = { current, total ->
+                    runOnUiThread {
+                        binding.settingsScrubCacheStatus.text =
+                            getString(R.string.prefetch_scrub_progress, current, total)
+                    }
+                },
+                onDone = { cached, cancelled ->
+                    runOnUiThread {
+                        toast(
+                            if (cancelled) getString(R.string.prefetch_scrub_cancelled, cached)
+                            else getString(R.string.prefetch_scrub_done, cached)
+                        )
+                        refreshScrubCacheStatus()
+                    }
+                },
+            )
+        }
+    }
+
+    private fun refreshScrubCacheStatus() {
+        org.fossify.commons.helpers.ensureBackgroundThread {
+            val pending = org.fossify.gallery.helpers.ScrubPrefetcher.pendingCount(applicationContext)
+            runOnUiThread {
+                binding.settingsScrubCacheStatus.text =
+                    getString(R.string.prefetch_scrub_pending, pending)
+            }
         }
     }
 
