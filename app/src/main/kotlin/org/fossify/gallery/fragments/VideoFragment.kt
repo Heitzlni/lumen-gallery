@@ -149,6 +149,29 @@ class VideoFragment : ViewPagerFragment(), TextureView.SurfaceTextureListener,
     // decoder with mid-seek cancellations that leave a stale frame on
     // screen while the next seek is starting.
     private var mScrubSeekInFlight = false
+    private val mScrubSeekTimeoutRunnable = Runnable {
+        // Safety net: if onPositionDiscontinuity never fires (codec stall,
+        // seek-to-same-position, certain edge cases) we'd be stuck with
+        // mScrubSeekInFlight=true forever and no further seeks. After
+        // ~250 ms force-clear and chase the latest target.
+        if (mScrubSeekInFlight) {
+            mScrubSeekInFlight = false
+            val pending = mPendingScrubTarget
+            val player = mExoPlayer
+            if (mIsDragged && player != null && pending >= 0L && pending != player.currentPosition) {
+                fireScrubSeek(pending)
+            }
+        }
+    }
+
+    private fun fireScrubSeek(target: Long) {
+        val player = mExoPlayer ?: return
+        mScrubSeekInFlight = true
+        mLastSeekTime = android.os.SystemClock.elapsedRealtime()
+        player.seekTo(target)
+        mScrubFlushHandler.removeCallbacks(mScrubSeekTimeoutRunnable)
+        mScrubFlushHandler.postDelayed(mScrubSeekTimeoutRunnable, 250L)
+    }
 
     // Pre-extracted thumbnails for instant scrub preview — ExoPlayer's
     // real-time decode is hardware-limited (~5–20 fps for EXACT seek), so
@@ -649,11 +672,10 @@ class VideoFragment : ViewPagerFragment(), TextureView.SurfaceTextureListener,
                 // clear the in-flight flag so the next finger move can
                 // seek directly.
                 if (reason == Player.DISCONTINUITY_REASON_SEEK && mScrubSeekInFlight) {
+                    mScrubFlushHandler.removeCallbacks(mScrubSeekTimeoutRunnable)
                     val pending = mPendingScrubTarget
-                    val player = mExoPlayer
-                    if (player != null && mIsDragged && pending >= 0L && pending != newPosition.positionMs) {
-                        player.seekTo(pending)
-                        // mScrubSeekInFlight stays true — the new seek is in flight now.
+                    if (mExoPlayer != null && mIsDragged && pending >= 0L && pending != newPosition.positionMs) {
+                        fireScrubSeek(pending)
                     } else {
                         mScrubSeekInFlight = false
                     }
@@ -904,8 +926,26 @@ class VideoFragment : ViewPagerFragment(), TextureView.SurfaceTextureListener,
         mExoPlayer!!.volume = mScrubSavedVolume
         mExoPlayer!!.playWhenReady = if (mIsPlaying) true else mScrubSavedPlayWhenReady
 
+        mScrubFlushHandler.removeCallbacks(mScrubSeekTimeoutRunnable)
         mScrubSeekInFlight = false
         mIsDragged = false
+
+        // Nudge: if many rapid scrubs left the codec in a stalled state,
+        // a paused player won't push the target frame to the surface and
+        // the viewport gets stuck on the last decoded frame. Do a tiny
+        // second seek 100 ms later to force a fresh decode + render.
+        if (!mIsPlaying) {
+            mScrubFlushHandler.postDelayed({
+                val player = mExoPlayer ?: return@postDelayed
+                try {
+                    val pos = player.currentPosition
+                    val nudge = if (pos > 0L) (pos - 1L).coerceAtLeast(0L) else 1L
+                    player.seekTo(nudge)
+                    player.seekTo(pos)
+                } catch (_: Exception) {
+                }
+            }, 100L)
+        }
     }
 
     private fun togglePlayPause() {
@@ -1018,10 +1058,8 @@ class VideoFragment : ViewPagerFragment(), TextureView.SurfaceTextureListener,
             // mid-decode cancels, the rendered frame tracks the finger
             // instead of lagging behind it.
             mPendingScrubTarget = milliseconds
-            val player = mExoPlayer
-            if (player != null && !mScrubSeekInFlight) {
-                mScrubSeekInFlight = true
-                player.seekTo(milliseconds)
+            if (mExoPlayer != null && !mScrubSeekInFlight) {
+                fireScrubSeek(milliseconds)
             }
         } else {
             mExoPlayer?.seekTo(milliseconds)
