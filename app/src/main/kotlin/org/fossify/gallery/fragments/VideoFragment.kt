@@ -165,13 +165,20 @@ class VideoFragment : ViewPagerFragment(), TextureView.SurfaceTextureListener,
         }
     }
 
+    /**
+     * Generous safety margin from end-of-stream. Seeking to the actual
+     * duration puts the player in STATE_ENDED and the transition out of
+     * that state has been crashing on the user's device (auto-loop kicks
+     * in, decoder re-preps, all on the main thread → ANR). Staying 250 ms
+     * back is imperceptible to the user but completely avoids end-of-
+     * stream entry.
+     */
+    private val SCRUB_END_SAFETY_MS = 250L
+
     private fun fireScrubSeek(target: Long) {
         val player = mExoPlayer ?: return
-        // Clamp to the valid range — seeking past duration can put the
-        // player into a STATE_ENDED that races the auto-loop and has
-        // caused crashes on at least some devices.
-        val safeTarget = if (mDuration > 1L) target.coerceIn(0L, mDuration - 1L)
-        else target.coerceAtLeast(0L)
+        val maxSafe = (mDuration - SCRUB_END_SAFETY_MS).coerceAtLeast(0L)
+        val safeTarget = target.coerceIn(0L, maxSafe)
         mScrubSeekInFlight = true
         mLastSeekTime = android.os.SystemClock.elapsedRealtime()
         try {
@@ -905,14 +912,12 @@ class VideoFragment : ViewPagerFragment(), TextureView.SurfaceTextureListener,
         // saw. Saving the prior state so onStopTrackingTouch can restore.
         mScrubSavedPlayWhenReady = player.playWhenReady
         mScrubSavedVolume = player.volume
-        mScrubSavedRepeatMode = player.repeatMode
         player.volume = 0f
         player.playWhenReady = true
-        // Disable looping while scrubbing — otherwise scrubbing to the
-        // last frame triggers an auto-loop back to 0 right after each
-        // seek, the seekbar fights the user, and the chase pattern can
-        // get stuck oscillating between end-of-stream and the target.
-        player.repeatMode = Player.REPEAT_MODE_OFF
+        // Don't touch repeat mode — toggling it at end-of-stream was
+        // triggering a re-prep storm that ANR'd the UI. The scrub-end
+        // safety clamp (fireScrubSeek) keeps the player well clear of
+        // duration so the loop never races us anyway.
         player.setSeekParameters(SeekParameters.CLOSEST_SYNC)
         // Any pending watchdog/nudge from the previous drag would fire
         // mid-this-drag and disrupt — kill them up front.
@@ -938,10 +943,17 @@ class VideoFragment : ViewPagerFragment(), TextureView.SurfaceTextureListener,
         // Re-seek precisely to the visible scrubber position so the displayed
         // frame matches where the user released, not whichever throttled seek
         // happened last.
-        val finalTarget =
+        val rawTarget =
             if (mPendingScrubTarget >= 0L) mPendingScrubTarget else mSeekBar.progress.toLong()
+        // Same safety clamp as fireScrubSeek — never land exactly at
+        // duration, which is what was crashing the player.
+        val maxSafe = (mDuration - SCRUB_END_SAFETY_MS).coerceAtLeast(0L)
+        val finalTarget = rawTarget.coerceIn(0L, maxSafe)
         mPendingScrubTarget = -1L
-        mExoPlayer!!.seekTo(finalTarget)
+        try {
+            mExoPlayer!!.seekTo(finalTarget)
+        } catch (_: Exception) {
+        }
         // Hide the thumbnail overlay only AFTER ExoPlayer has had a moment
         // to decode the target frame — otherwise the overlay disappears
         // and the user briefly sees the pre-seek (stale) video frame.
@@ -952,28 +964,14 @@ class VideoFragment : ViewPagerFragment(), TextureView.SurfaceTextureListener,
         // grabbed the scrub bar.
         mExoPlayer!!.volume = mScrubSavedVolume
         mExoPlayer!!.playWhenReady = if (mIsPlaying) true else mScrubSavedPlayWhenReady
-        mExoPlayer!!.repeatMode = mScrubSavedRepeatMode
 
         mScrubFlushHandler.removeCallbacks(mScrubSeekTimeoutRunnable)
         mScrubSeekInFlight = false
         mIsDragged = false
-
-        // Nudge: if many rapid scrubs left the codec in a stalled state,
-        // a paused player won't push the target frame to the surface and
-        // the viewport gets stuck on the last decoded frame. Do a tiny
-        // second seek 100 ms later to force a fresh decode + render.
-        if (!mIsPlaying) {
-            mScrubFlushHandler.postDelayed({
-                val player = mExoPlayer ?: return@postDelayed
-                try {
-                    val pos = player.currentPosition
-                    val nudge = if (pos > 0L) (pos - 1L).coerceAtLeast(0L) else 1L
-                    player.seekTo(nudge)
-                    player.seekTo(pos)
-                } catch (_: Exception) {
-                }
-            }, 100L)
-        }
+        // Removed the post-release "nudge" seek that was firing 100ms
+        // after release — it was making the end-of-stream race worse
+        // and the scrub safety clamp means we never land exactly at
+        // duration so the decoder doesn't get stuck anymore.
     }
 
     private fun togglePlayPause() {
