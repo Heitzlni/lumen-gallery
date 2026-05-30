@@ -379,6 +379,16 @@
     <string name="photo_text_search_clear">Clear OCR text index</string>
     <string name="photo_text_search_clear_confirm">Delete all extracted text? You can re-scan afterwards.</string>
     <string name="photo_text_search_cleared">OCR text index cleared.</string>
+    <string name="clip_search_index_now">Build smart search (CLIP) index</string>
+    <string name="clip_search_indexed_count">%1$d photos in CLIP index</string>
+    <string name="clip_search_progress">Embedding: %1$d / %2$d</string>
+    <string name="clip_search_started">CLIP indexing started in background…</string>
+    <string name="clip_search_done">Embedded %1$d new photos.</string>
+    <string name="clip_search_cancelled">CLIP indexing cancelled (%1$d done).</string>
+    <string name="clip_search_cancelling">Cancelling CLIP indexing…</string>
+    <string name="clip_search_clear">Clear smart search (CLIP) index</string>
+    <string name="clip_search_clear_confirm">Delete all CLIP embeddings? You can rebuild afterwards.</string>
+    <string name="clip_search_cleared">CLIP index cleared.</string>
     <plurals name="vault_restore_confirm">
         <item quantity="one">Restore %d item back to your gallery and remove it from the vault?</item>
         <item quantity="other">Restore %d items back to your gallery and remove them from the vault?</item>

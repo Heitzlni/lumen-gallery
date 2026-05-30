@@ -97,10 +97,9 @@ class SearchActivity : SimpleActivity(), MediaOperationsListener {
     private fun textChanged(text: String) {
         ensureBackgroundThread {
             try {
-                // Filename match (cheap) + ML Kit label match + OCR text match.
-                // Index paths can occasionally differ in casing / symlink
-                // resolution from Medium.path, so we also expose a filename
-                // fallback set.
+                // Filename match (cheap) + ML Kit label match + OCR text match
+                // + CLIP semantic match. All three on-device signals unioned;
+                // filename-fallback set covers album-view path/name skew.
                 val mlPaths: Set<String>
                 val mlFilenames: Set<String>
                 if (text.isNotBlank()) {
@@ -115,9 +114,15 @@ class SearchActivity : SimpleActivity(), MediaOperationsListener {
                     } catch (_: Exception) {
                         emptyList()
                     }
-                    val raw = HashSet<String>(labelPaths.size + textPaths.size)
+                    val clipPaths = try {
+                        org.fossify.gallery.helpers.EmbeddingSearch.search(applicationContext, text)
+                    } catch (_: Exception) {
+                        emptyList()
+                    }
+                    val raw = HashSet<String>(labelPaths.size + textPaths.size + clipPaths.size)
                     raw.addAll(labelPaths)
                     raw.addAll(textPaths)
+                    raw.addAll(clipPaths)
                     mlPaths = raw
                     mlFilenames = raw.mapTo(HashSet()) { it.substringAfterLast('/') }
                 } else {

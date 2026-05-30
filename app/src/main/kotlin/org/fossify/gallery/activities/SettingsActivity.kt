@@ -65,6 +65,8 @@ class SettingsActivity : SimpleActivity() {
         setupClearIndex()
         setupIndexTexts()
         setupClearTexts()
+        setupIndexClip()
+        setupClearClip()
         setupManageHiddenFolders()
         setupSearchAllFiles()
         setupShowHiddenItems()
@@ -362,6 +364,65 @@ class SettingsActivity : SimpleActivity() {
                     runOnUiThread {
                         toast(R.string.photo_text_search_cleared)
                         refreshTextIndexStatus()
+                    }
+                }
+            }
+        }
+    }
+
+    private fun setupIndexClip() {
+        refreshClipIndexStatus()
+        binding.settingsIndexClipHolder.setOnClickListener {
+            if (org.fossify.gallery.helpers.EmbeddingIndexer.isRunning) {
+                org.fossify.gallery.helpers.EmbeddingIndexer.cancel()
+                toast(R.string.clip_search_cancelling)
+                return@setOnClickListener
+            }
+            toast(R.string.clip_search_started)
+            org.fossify.gallery.helpers.EmbeddingIndexer.indexAll(
+                applicationContext,
+                onProgress = { current, total ->
+                    runOnUiThread {
+                        binding.settingsIndexClipStatus.text =
+                            getString(R.string.clip_search_progress, current, total)
+                    }
+                },
+                onDone = { count, cancelled ->
+                    runOnUiThread {
+                        toast(
+                            if (cancelled) getString(R.string.clip_search_cancelled, count)
+                            else getString(R.string.clip_search_done, count)
+                        )
+                        org.fossify.gallery.helpers.EmbeddingSearch.invalidate()
+                        refreshClipIndexStatus()
+                    }
+                },
+            )
+        }
+    }
+
+    private fun refreshClipIndexStatus() {
+        org.fossify.commons.helpers.ensureBackgroundThread {
+            val indexed = applicationContext.imageEmbeddingDB.count()
+            runOnUiThread {
+                binding.settingsIndexClipStatus.text =
+                    getString(R.string.clip_search_indexed_count, indexed)
+            }
+        }
+    }
+
+    private fun setupClearClip() {
+        binding.settingsClearClipHolder.setOnClickListener {
+            org.fossify.commons.dialogs.ConfirmationDialog(
+                this,
+                getString(R.string.clip_search_clear_confirm)
+            ) {
+                org.fossify.commons.helpers.ensureBackgroundThread {
+                    applicationContext.imageEmbeddingDB.clearAll()
+                    org.fossify.gallery.helpers.EmbeddingSearch.invalidate()
+                    runOnUiThread {
+                        toast(R.string.clip_search_cleared)
+                        refreshClipIndexStatus()
                     }
                 }
             }

@@ -104,6 +104,11 @@ android {
     androidResources {
         @Suppress("UnstableApiUsage")
         generateLocaleConfig = true
+        // ONNX model files are already heavily quantized — compressing them again
+        // during APK assembly costs install time + RAM for zero size win, and
+        // ORT can mmap uncompressed assets directly.
+        @Suppress("UnstableApiUsage")
+        noCompress.add("onnx")
     }
 
     tasks.withType<KotlinCompile> {
@@ -154,6 +159,7 @@ dependencies {
     implementation(libs.androidx.security.crypto)
     implementation(libs.mlkit.image.labeling)
     implementation(libs.mlkit.text.recognition)
+    implementation(libs.onnxruntime.android)
     implementation(libs.androidx.media3.exoplayer)
     implementation(libs.androidx.media3.transformer)
     implementation(libs.androidx.media3.ui)
