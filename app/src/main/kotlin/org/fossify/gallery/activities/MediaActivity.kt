@@ -71,6 +71,7 @@ import org.fossify.gallery.extensions.emptyAndDisableTheRecycleBin
 import org.fossify.gallery.extensions.emptyTheRecycleBin
 import org.fossify.gallery.extensions.favoritesDB
 import org.fossify.gallery.extensions.getFavoritePaths
+import org.fossify.gallery.extensions.imageEmbeddingDB
 import org.fossify.gallery.extensions.imageLabelDB
 import org.fossify.gallery.extensions.imageTextDB
 import org.fossify.gallery.extensions.getCachedMedia
@@ -487,10 +488,12 @@ class MediaActivity : SimpleActivity(), MediaOperationsListener {
     private fun searchQueryChanged(text: String) {
         ensureBackgroundThread {
             try {
-                // ML-Kit label match + OCR text match. Both DAOs return paths
-                // whose label/text contain the query — we union them and also
-                // expose a filename-fallback set so albums showing relative
-                // filenames still resolve.
+                // Three on-device signals union'd into one match set:
+                //   1. ML-Kit label match  (image_labels.label LIKE ...)
+                //   2. OCR text match      (image_texts.text  LIKE ...)
+                //   3. CLIP semantic match (cosine over image_embeddings)
+                // Plus a filename-fallback set so album views that key off
+                // bare filenames still resolve when MediaStore.path differs.
                 val mlPaths: Set<String>
                 val mlFilenames: Set<String>
                 if (text.isNotBlank()) {
@@ -505,9 +508,15 @@ class MediaActivity : SimpleActivity(), MediaOperationsListener {
                     } catch (_: Exception) {
                         emptyList()
                     }
-                    val raw = HashSet<String>(labelPaths.size + textPaths.size)
+                    val clipPaths = try {
+                        org.fossify.gallery.helpers.EmbeddingSearch.search(applicationContext, text)
+                    } catch (_: Exception) {
+                        emptyList()
+                    }
+                    val raw = HashSet<String>(labelPaths.size + textPaths.size + clipPaths.size)
                     raw.addAll(labelPaths)
                     raw.addAll(textPaths)
+                    raw.addAll(clipPaths)
                     mlPaths = raw
                     mlFilenames = raw.mapTo(HashSet()) { it.substringAfterLast('/') }
                 } else {

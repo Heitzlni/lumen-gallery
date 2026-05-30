@@ -9,7 +9,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 import org.fossify.gallery.interfaces.*
 import org.fossify.gallery.models.*
 
-@Database(entities = [Directory::class, Medium::class, Widget::class, DateTaken::class, Favorite::class, VaultItem::class, ImageLabel::class, ImageText::class], version = 16)
+@Database(entities = [Directory::class, Medium::class, Widget::class, DateTaken::class, Favorite::class, VaultItem::class, ImageLabel::class, ImageText::class, ImageEmbedding::class], version = 17)
 abstract class GalleryDatabase : RoomDatabase() {
 
     abstract fun DirectoryDao(): DirectoryDao
@@ -27,6 +27,8 @@ abstract class GalleryDatabase : RoomDatabase() {
     abstract fun ImageLabelDao(): ImageLabelDao
 
     abstract fun ImageTextDao(): ImageTextDao
+
+    abstract fun ImageEmbeddingDao(): ImageEmbeddingDao
 
     companion object {
         private var db: GalleryDatabase? = null
@@ -49,6 +51,7 @@ abstract class GalleryDatabase : RoomDatabase() {
                             .addMigrations(MIGRATION_13_14)
                             .addMigrations(MIGRATION_14_15)
                             .addMigrations(MIGRATION_15_16)
+                            .addMigrations(MIGRATION_16_17)
                             .build()
                     }
                 }
@@ -155,6 +158,19 @@ abstract class GalleryDatabase : RoomDatabase() {
                         "`indexed_at` INTEGER NOT NULL)"
                 )
                 database.execSQL("CREATE UNIQUE INDEX `index_image_texts_media_path` ON `image_texts` (`media_path`)")
+            }
+        }
+
+        private val MIGRATION_16_17 = object : Migration(16, 17) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `image_embeddings` (" +
+                        "`id` INTEGER PRIMARY KEY AUTOINCREMENT, " +
+                        "`media_path` TEXT NOT NULL, " +
+                        "`vec` BLOB NOT NULL, " +
+                        "`indexed_at` INTEGER NOT NULL)"
+                )
+                database.execSQL("CREATE UNIQUE INDEX `index_image_embeddings_media_path` ON `image_embeddings` (`media_path`)")
             }
         }
     }
