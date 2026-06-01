@@ -159,18 +159,6 @@ class PhotoFragment : ViewPagerFragment() {
             subsamplingView.setOnClickListener { photoClicked() }
             gesturesView.setOnClickListener { photoClicked() }
             gifView.setOnClickListener { photoClicked() }
-
-            // Long-press anywhere on the photo → run OCR and show selectable
-            // text. Standard Android long-press detection coexists with the
-            // existing pan/zoom because gesture detectors win the race when
-            // the user actually scrolls or pinches.
-            val longPress = View.OnLongClickListener {
-                openLiveText()
-                true
-            }
-            subsamplingView.setOnLongClickListener(longPress)
-            gesturesView.setOnLongClickListener(longPress)
-            gifView.setOnLongClickListener(longPress)
             instantPrevItem.setOnClickListener { listener?.goToPrevItem() }
             instantNextItem.setOnClickListener { listener?.goToNextItem() }
             panoramaOutline.setOnClickListener { openPanorama() }
@@ -188,13 +176,29 @@ class PhotoFragment : ViewPagerFragment() {
                 }
             })
 
-            gifView.setOnTouchListener { v, event ->
+            // Long-press → Live Text. Apple style. Has to go through our own
+            // GestureDetector because both `gesturesView` and `subsamplingView`
+            // install their own internal gesture detectors that swallow
+            // MotionEvents before View.onTouchEvent's long-press timer runs,
+            // so plain setOnLongClickListener never fires on them.
+            val longPressDetector = android.view.GestureDetector(
+                context,
+                object : android.view.GestureDetector.SimpleOnGestureListener() {
+                    override fun onLongPress(e: android.view.MotionEvent) {
+                        openLiveText()
+                    }
+                },
+            )
+
+            gifView.setOnTouchListener { _, event ->
+                longPressDetector.onTouchEvent(event)
                 if (context.config.allowDownGesture && gifViewFrame.controller.state.zoom == 1f) handleEvent(event)
                 false
             }
 
             setupGesturesViewStateListener()
-            gesturesView.setOnTouchListener { v, event ->
+            gesturesView.setOnTouchListener { _, event ->
+                longPressDetector.onTouchEvent(event)
                 val allowDownGesture = context.config.allowDownGesture
                 if (allowDownGesture && abs(mCurrentGestureViewZoom - mInitialZoom) < MAX_ZOOM_EQUALITY_TOLERANCE) {
                     handleEvent(event)
@@ -202,7 +206,8 @@ class PhotoFragment : ViewPagerFragment() {
                 false
             }
 
-            subsamplingView.setOnTouchListener { v, event ->
+            subsamplingView.setOnTouchListener { _, event ->
+                longPressDetector.onTouchEvent(event)
                 if (subsamplingView.isZoomedOut() && context.config.allowDownGesture) handleEvent(event)
                 false
             }
