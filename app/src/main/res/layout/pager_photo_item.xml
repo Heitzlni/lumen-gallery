@@ -121,4 +121,52 @@
         android:layout_height="match_parent"
         android:layout_alignParentEnd="true" />
 
+    <org.fossify.gallery.views.LiveTextOverlay
+        android:id="@+id/live_text_overlay"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:visibility="gone" />
+
+    <LinearLayout
+        android:id="@+id/live_text_bar"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_alignParentTop="true"
+        android:layout_centerHorizontal="true"
+        android:layout_marginTop="48dp"
+        android:background="@drawable/black_rounded_background"
+        android:orientation="horizontal"
+        android:padding="@dimen/small_margin"
+        android:visibility="gone">
+
+        <ImageButton
+            android:id="@+id/live_text_close"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@string/live_text_close"
+            android:src="@android:drawable/ic_menu_close_clear_cancel"
+            android:tint="@android:color/white" />
+
+        <ImageButton
+            android:id="@+id/live_text_select_all"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@string/live_text_select_all"
+            android:src="@android:drawable/ic_menu_view"
+            android:tint="@android:color/white" />
+
+        <ImageButton
+            android:id="@+id/live_text_copy"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@string/live_text_copy"
+            android:enabled="false"
+            android:src="@android:drawable/ic_menu_save"
+            android:tint="@android:color/white" />
+
+    </LinearLayout>
+
 </RelativeLayout>

@@ -370,6 +370,11 @@ class PhotoFragment : ViewPagerFragment() {
     override fun setMenuVisibility(menuVisible: Boolean) {
         super.setMenuVisibility(menuVisible)
         mIsFragmentVisible = menuVisible
+        if (!menuVisible && mLiveTextActive) {
+            // Swiping to a sibling photo should drop Live Text — leaving it
+            // half-open on a hidden fragment leaks the locked gestures.
+            exitLiveText()
+        }
         if (mWasInit) {
             val isNotAnimatedContent =
                 !mMedium.isGIF() && !mMedium.isApng() && !mMedium.isAvif() && !mMedium.isWebP()
@@ -961,13 +966,105 @@ class PhotoFragment : ViewPagerFragment() {
         listener?.fragmentClicked()
     }
 
-    /** Apple-style Live Text: long-press → recognize, drag-select, copy. */
+    private var mLiveTextActive = false
+
+    /** Apple-style Live Text. Long-press → run OCR with bounding boxes,
+     *  overlay highlight rects on each detected line at the photo's current
+     *  zoom/pan state, freeze interaction underneath (the overlay covers
+     *  the viewport so the image view never receives any MotionEvents),
+     *  and expose Copy / Select All / Close.
+     *
+     *  GIFs and animated formats fall back to the simpler bottom-sheet
+     *  dialog because we don't have a stable projector for those. */
     private fun openLiveText() {
         val activity = activity ?: return
         if (activity.isFinishing || activity.isDestroyed) return
+        if (mLiveTextActive) return
         val path = mMedium.path
         if (path.isEmpty()) return
-        org.fossify.gallery.dialogs.LiveTextDialog(activity, path)
+
+        val projector = currentLiveTextProjector()
+        if (projector == null) {
+            org.fossify.gallery.dialogs.LiveTextDialog(activity, path)
+            return
+        }
+
+        activity.toast(R.string.live_text_scanning)
+        org.fossify.commons.helpers.ensureBackgroundThread {
+            val result = org.fossify.gallery.helpers.OcrRecognizer.recognize(activity, path)
+            activity.runOnUiThread {
+                if (this.activity == null || this.activity?.isFinishing == true) return@runOnUiThread
+                if (result == null || result.lines.isEmpty()) {
+                    activity.toast(R.string.live_text_no_text)
+                    return@runOnUiThread
+                }
+                enterLiveText(result.lines, projector)
+            }
+        }
+    }
+
+    private fun currentLiveTextProjector(): ((android.graphics.Rect) -> android.graphics.RectF?)? {
+        val sub = binding.subsamplingView
+        if (sub.isVisible() && mIsSubsamplingVisible) {
+            return { rect ->
+                val tl = sub.sourceToViewCoord(android.graphics.PointF(rect.left.toFloat(), rect.top.toFloat()))
+                val br = sub.sourceToViewCoord(android.graphics.PointF(rect.right.toFloat(), rect.bottom.toFloat()))
+                if (tl != null && br != null) android.graphics.RectF(tl.x, tl.y, br.x, br.y) else null
+            }
+        }
+        val ges = binding.gesturesView
+        if (ges.isVisible() && ges.drawable != null) {
+            return { rect ->
+                val m = ges.imageMatrix
+                val r = android.graphics.RectF(rect)
+                m.mapRect(r)
+                r
+            }
+        }
+        return null
+    }
+
+    private fun enterLiveText(
+        lines: List<org.fossify.gallery.helpers.OcrRecognizer.Line>,
+        projector: (android.graphics.Rect) -> android.graphics.RectF?,
+    ) {
+        val activity = activity ?: return
+        mLiveTextActive = true
+
+        binding.liveTextOverlay.setRecognition(lines, projector)
+        binding.liveTextOverlay.beVisible()
+        binding.liveTextBar.beVisible()
+        binding.liveTextCopy.isEnabled = false
+
+        binding.liveTextOverlay.onSelectionChanged = { count ->
+            binding.liveTextCopy.isEnabled = count > 0
+        }
+        binding.liveTextOverlay.onMissTap = {
+            exitLiveText()
+        }
+        binding.liveTextClose.setOnClickListener { exitLiveText() }
+        binding.liveTextSelectAll.setOnClickListener {
+            binding.liveTextOverlay.selectAll()
+        }
+        binding.liveTextCopy.setOnClickListener {
+            val text = binding.liveTextOverlay.selectedText()
+            if (text.isEmpty()) {
+                activity.toast(R.string.live_text_no_text)
+                return@setOnClickListener
+            }
+            val cm = activity.getSystemService(android.content.Context.CLIPBOARD_SERVICE)
+                as? android.content.ClipboardManager
+            cm?.setPrimaryClip(android.content.ClipData.newPlainText("text", text))
+            activity.toast(R.string.live_text_copied)
+        }
+    }
+
+    private fun exitLiveText() {
+        if (!mLiveTextActive) return
+        mLiveTextActive = false
+        binding.liveTextOverlay.clear()
+        binding.liveTextOverlay.beGone()
+        binding.liveTextBar.beGone()
     }
 
     private fun updateInstantSwitchWidths() {

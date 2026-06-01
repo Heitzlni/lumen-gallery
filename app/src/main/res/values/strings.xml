@@ -394,6 +394,11 @@
     <string name="live_text_none_found">No text detected.</string>
     <string name="live_text_copy_all">Copy all</string>
     <string name="live_text_copied">Text copied to clipboard.</string>
+    <string name="live_text_close">Close Live Text</string>
+    <string name="live_text_select_all">Select all text</string>
+    <string name="live_text_copy">Copy selected text</string>
+    <string name="live_text_no_text">No text in this photo.</string>
+    <string name="live_text_unavailable">Live Text isn\'t available on this image.</string>
     <plurals name="vault_restore_confirm">
         <item quantity="one">Restore %d item back to your gallery and remove it from the vault?</item>
         <item quantity="other">Restore %d items back to your gallery and remove them from the vault?</item>
