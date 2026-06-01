@@ -159,6 +159,18 @@ class PhotoFragment : ViewPagerFragment() {
             subsamplingView.setOnClickListener { photoClicked() }
             gesturesView.setOnClickListener { photoClicked() }
             gifView.setOnClickListener { photoClicked() }
+
+            // Long-press anywhere on the photo → run OCR and show selectable
+            // text. Standard Android long-press detection coexists with the
+            // existing pan/zoom because gesture detectors win the race when
+            // the user actually scrolls or pinches.
+            val longPress = View.OnLongClickListener {
+                openLiveText()
+                true
+            }
+            subsamplingView.setOnLongClickListener(longPress)
+            gesturesView.setOnLongClickListener(longPress)
+            gifView.setOnLongClickListener(longPress)
             instantPrevItem.setOnClickListener { listener?.goToPrevItem() }
             instantNextItem.setOnClickListener { listener?.goToNextItem() }
             panoramaOutline.setOnClickListener { openPanorama() }
@@ -942,6 +954,15 @@ class PhotoFragment : ViewPagerFragment() {
 
     private fun photoClicked() {
         listener?.fragmentClicked()
+    }
+
+    /** Apple-style Live Text: long-press → recognize, drag-select, copy. */
+    private fun openLiveText() {
+        val activity = activity ?: return
+        if (activity.isFinishing || activity.isDestroyed) return
+        val path = mMedium.path
+        if (path.isEmpty()) return
+        org.fossify.gallery.dialogs.LiveTextDialog(activity, path)
     }
 
     private fun updateInstantSwitchWidths() {
