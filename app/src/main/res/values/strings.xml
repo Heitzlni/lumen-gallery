@@ -389,6 +389,11 @@
     <string name="clip_search_clear">Clear smart search (CLIP) index</string>
     <string name="clip_search_clear_confirm">Delete all CLIP embeddings? You can rebuild afterwards.</string>
     <string name="clip_search_cleared">CLIP index cleared.</string>
+    <string name="live_text_title">Text in this photo</string>
+    <string name="live_text_scanning">Scanning…</string>
+    <string name="live_text_none_found">No text detected.</string>
+    <string name="live_text_copy_all">Copy all</string>
+    <string name="live_text_copied">Text copied to clipboard.</string>
     <plurals name="vault_restore_confirm">
         <item quantity="one">Restore %d item back to your gallery and remove it from the vault?</item>
         <item quantity="other">Restore %d items back to your gallery and remove them from the vault?</item>
