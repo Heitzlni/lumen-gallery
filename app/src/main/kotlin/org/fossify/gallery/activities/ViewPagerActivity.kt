@@ -244,28 +244,26 @@ class ViewPagerActivity : BaseViewerActivity(), ViewPager.OnPageChangeListener, 
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-        // launchMode=singleTask means clicking a new video from Show All
-        // while this activity is still in the back stack (e.g. after the
-        // user closed a PiP window without finishing the activity) does
-        // NOT recreate us — we get the new intent here. Without this
-        // override the user sees whatever video was open before instead
-        // of the one they just tapped.
         setIntent(intent)
         val newPath = intent.getStringExtra(PATH)
             ?: intent.data?.let { getDataColumn(it) }
+        android.util.Log.d(
+            "ViewPagerActivity",
+            "onNewIntent fired — newPath=$newPath  mPath=$mPath"
+        )
         if (newPath.isNullOrEmpty() || newPath == mPath) return
 
-        // Release any in-flight player so the next swap doesn't trample
-        // an active surface, then re-seed the media list + re-init.
+        // launchMode=singleTask means a "click a different video while the
+        // previous one is still resident in the back stack" delivers the
+        // new intent here instead of recreating us. In-place reinit kept
+        // the old ViewPager adapter (and its cached VideoFragment) alive,
+        // so the old clip stayed on screen. recreate() rebuilds the whole
+        // activity with the new intent → fresh adapter, fresh fragment,
+        // right video on the first tap. Release the old player first so
+        // its audio doesn't bleed through the swap.
         (getCurrentFragment() as? org.fossify.gallery.fragments.VideoFragment)
             ?.releaseFromPip()
-        mMediaFiles.clear()
-        (MediaActivity.mMedia.clone() as ArrayList<ThumbnailItem>)
-            .filterIsInstanceTo(mMediaFiles, Medium::class.java)
-        mPos = -1
-        requestMediaPermissions {
-            initViewPager(savedPath = "")
-        }
+        recreate()
     }
 
     override fun onResume() {
