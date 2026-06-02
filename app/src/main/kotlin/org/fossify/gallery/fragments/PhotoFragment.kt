@@ -985,6 +985,8 @@ class PhotoFragment : ViewPagerFragment() {
 
     private var mLiveTextActive = false
     private var mLiveTextForcedFullscreen = false
+    private var mLiveTextSavedGesDoubleTapZoom: Float? = null
+    private var mLiveTextSavedSubDoubleTapScale: Float? = null
 
     /** Apple-style Live Text. Long-press → run OCR with bounding boxes,
      *  overlay highlight rects on each detected word at the photo's
@@ -1076,6 +1078,25 @@ class PhotoFragment : ViewPagerFragment() {
         binding.liveTextBar.beVisible()
         binding.liveTextCopy.isEnabled = false
 
+        // Neutralize double-tap-zoom on whichever image view is mounted
+        // so the user's 2nd / 3rd tap of progressive line/block selection
+        // isn't interpreted as a zoom gesture by the underlying view's
+        // own gesture detector. Pinch (two-finger) still works.
+        // Neither library exposes a clean "disable double-tap" setter —
+        // both use a zoom-scale float, so setting it to 1.0 makes the
+        // double-tap a visual no-op.
+        val ges = binding.gesturesView
+        if (ges.isVisible()) {
+            val s = ges.controller.settings
+            mLiveTextSavedGesDoubleTapZoom = s.doubleTapZoom
+            s.doubleTapZoom = 1.0f
+        }
+        val sub = binding.subsamplingView
+        if (sub.isVisible() && mIsSubsamplingVisible) {
+            mLiveTextSavedSubDoubleTapScale = sub.doubleTapZoomScale
+            sub.doubleTapZoomScale = 1.0f
+        }
+
         binding.liveTextOverlay.onSelectionChanged = { count ->
             binding.liveTextCopy.isEnabled = count > 0
         }
@@ -1102,6 +1123,16 @@ class PhotoFragment : ViewPagerFragment() {
         binding.liveTextOverlay.clear()
         binding.liveTextOverlay.beGone()
         binding.liveTextBar.beGone()
+
+        mLiveTextSavedGesDoubleTapZoom?.let { saved ->
+            binding.gesturesView.controller.settings.doubleTapZoom = saved
+        }
+        mLiveTextSavedGesDoubleTapZoom = null
+        mLiveTextSavedSubDoubleTapScale?.let { saved ->
+            binding.subsamplingView.doubleTapZoomScale = saved
+        }
+        mLiveTextSavedSubDoubleTapScale = null
+
         if (mLiveTextForcedFullscreen && mIsFullscreen) {
             mLiveTextForcedFullscreen = false
             listener?.fragmentClicked()

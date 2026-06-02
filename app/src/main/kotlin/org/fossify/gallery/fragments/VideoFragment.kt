@@ -649,7 +649,14 @@ class VideoFragment : ViewPagerFragment(), TextureView.SurfaceTextureListener,
             .setLoadControl(loadControl)
             .build()
             .apply {
-                if (mConfig.loopVideos && listener?.isSlideShowActive() == false) {
+                // REPEAT_MODE_ONE makes ExoPlayer loop the same clip
+                // internally — STATE_ENDED never fires, so playlist
+                // auto-advance can't see the end. Force OFF whenever a
+                // playback queue is active.
+                if (mConfig.loopVideos &&
+                    listener?.isSlideShowActive() == false &&
+                    !org.fossify.gallery.helpers.PlaybackQueue.isActive
+                ) {
                     repeatMode = Player.REPEAT_MODE_ONE
                 }
                 setPlaybackSpeed(mConfig.playbackSpeed)
@@ -1312,7 +1319,10 @@ class VideoFragment : ViewPagerFragment(), TextureView.SurfaceTextureListener,
         }
 
         mCurrTime = mExoPlayer!!.duration
-        if (listener?.videoEnded() == false && mConfig.loopVideos) {
+        if (listener?.videoEnded() == false &&
+            mConfig.loopVideos &&
+            !org.fossify.gallery.helpers.PlaybackQueue.isActive
+        ) {
             playVideo()
         } else {
             mSeekBar.progress = mSeekBar.max
