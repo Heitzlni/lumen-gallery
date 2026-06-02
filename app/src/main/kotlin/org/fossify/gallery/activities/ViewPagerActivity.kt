@@ -242,6 +242,32 @@ class ViewPagerActivity : BaseViewerActivity(), ViewPager.OnPageChangeListener, 
         initFavorites()
     }
 
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        // launchMode=singleTask means clicking a new video from Show All
+        // while this activity is still in the back stack (e.g. after the
+        // user closed a PiP window without finishing the activity) does
+        // NOT recreate us — we get the new intent here. Without this
+        // override the user sees whatever video was open before instead
+        // of the one they just tapped.
+        setIntent(intent)
+        val newPath = intent.getStringExtra(PATH)
+            ?: intent.data?.let { getDataColumn(it) }
+        if (newPath.isNullOrEmpty() || newPath == mPath) return
+
+        // Release any in-flight player so the next swap doesn't trample
+        // an active surface, then re-seed the media list + re-init.
+        (getCurrentFragment() as? org.fossify.gallery.fragments.VideoFragment)
+            ?.releaseFromPip()
+        mMediaFiles.clear()
+        (MediaActivity.mMedia.clone() as ArrayList<ThumbnailItem>)
+            .filterIsInstanceTo(mMediaFiles, Medium::class.java)
+        mPos = -1
+        requestMediaPermissions {
+            initViewPager(savedPath = "")
+        }
+    }
+
     override fun onResume() {
         super.onResume()
         if (!hasPermission(getPermissionToRequest())) {
