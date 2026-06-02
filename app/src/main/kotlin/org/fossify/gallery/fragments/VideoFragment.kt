@@ -1014,6 +1014,7 @@ class VideoFragment : ViewPagerFragment(), TextureView.SurfaceTextureListener,
         }
         mExoPlayer?.playWhenReady = true
         activity?.window?.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        notifyPipPlayStateChanged()
     }
 
     private fun pauseVideo() {
@@ -1029,6 +1030,18 @@ class VideoFragment : ViewPagerFragment(), TextureView.SurfaceTextureListener,
         mPlayPauseButton.setImageResource(org.fossify.commons.R.drawable.ic_play_outline_vector)
         activity?.window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         mPositionAtPause = mExoPlayer?.currentPosition ?: 0L
+        notifyPipPlayStateChanged()
+    }
+
+    /** Public entry point so [ViewPagerActivity]'s PiP RemoteAction
+     *  broadcast receiver can toggle playback from outside the fragment. */
+    fun togglePlayPauseFromPip() {
+        if (activity == null || !isAdded) return
+        if (mIsPlaying) pauseVideo() else playVideo()
+    }
+
+    private fun notifyPipPlayStateChanged() {
+        (activity as? org.fossify.gallery.activities.ViewPagerActivity)?.updatePipActions()
     }
 
     private fun videoEnded(): Boolean {
