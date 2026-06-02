@@ -7,21 +7,24 @@ import android.graphics.Paint
 import android.graphics.Rect
 import android.graphics.RectF
 import android.util.AttributeSet
+import android.view.GestureDetector
 import android.view.MotionEvent
 import android.view.View
 import org.fossify.gallery.helpers.OcrRecognizer
 
 /**
- * Apple-style Live Text overlay. Sits transparently above the photo, draws
- * faint outlines around every detected line of text, and highlights the
- * tapped line. Coordinate translation from source-image pixels to view
- * pixels is plugged in from outside — the overlay does not know whether
- * the image is rendered by `SubsamplingScaleImageView` or a plain
- * `GestureImageView`.
+ * Apple-style Live Text overlay. Sits transparently above the photo,
+ * draws faint outlines around every recognized *word*, and highlights
+ * the tapped words.
  *
- * Touch behavior is dead simple by design: any single tap inside a line
- * box selects that line; any tap outside reports a miss to the caller so
- * the host can drop out of Live Text mode.
+ * Granularity:
+ *   - Single tap on a word → toggle just that word.
+ *   - Double tap on a word → select the entire line that word belongs to.
+ *   - Tap outside any word → exit Live Text (reported via [onMissTap]).
+ *
+ * Coordinate translation from source-image pixels to view pixels is
+ * plugged in from outside — the overlay does not know whether the
+ * image is rendered by `SubsamplingScaleImageView` or `GestureImageView`.
  */
 class LiveTextOverlay @JvmOverloads constructor(
     context: Context,
@@ -30,22 +33,21 @@ class LiveTextOverlay @JvmOverloads constructor(
 ) : View(context, attrs, defStyle) {
 
     private data class Slot(
-        val source: OcrRecognizer.Line,
+        val source: OcrRecognizer.Word,
         val viewBounds: RectF,
     )
 
     private var slots: List<Slot> = emptyList()
     private var projector: ((Rect) -> RectF?)? = null
-    private val selectedLineIds = HashSet<Int>()
+    private val selectedWordKeys = HashSet<Int>()
 
     /**
-     * Called after a tap is consumed by the overlay. Caller can use this to
-     * update an action bar's enabled state etc. Receives the number of
-     * currently-selected lines.
+     * Called after a tap is consumed by the overlay. Receives the number
+     * of currently-selected words.
      */
     var onSelectionChanged: (selectedCount: Int) -> Unit = {}
 
-    /** Called when the user tapped outside any text line. */
+    /** Called when the user tapped outside any text element. */
     var onMissTap: () -> Unit = {}
 
     private val outlinePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -65,10 +67,29 @@ class LiveTextOverlay @JvmOverloads constructor(
 
     private val cornerRadius = dp(4f)
 
-    fun setRecognition(lines: List<OcrRecognizer.Line>, projector: (Rect) -> RectF?) {
-        this.slots = lines.map { Slot(it, RectF()) }
+    // Word identity within a session = its order in [slots]. Stable
+    // because we never mutate the list after setRecognition.
+    private val Slot.key: Int get() = slots.indexOf(this)
+
+    private val gestureDetector: GestureDetector = GestureDetector(
+        context,
+        object : GestureDetector.SimpleOnGestureListener() {
+            override fun onSingleTapConfirmed(e: MotionEvent): Boolean {
+                handleTap(e.x, e.y, selectWholeLine = false)
+                return true
+            }
+
+            override fun onDoubleTap(e: MotionEvent): Boolean {
+                handleTap(e.x, e.y, selectWholeLine = true)
+                return true
+            }
+        },
+    )
+
+    fun setRecognition(words: List<OcrRecognizer.Word>, projector: (Rect) -> RectF?) {
+        this.slots = words.map { Slot(it, RectF()) }
         this.projector = projector
-        selectedLineIds.clear()
+        selectedWordKeys.clear()
         onSelectionChanged(0)
         refreshProjection()
     }
@@ -76,7 +97,7 @@ class LiveTextOverlay @JvmOverloads constructor(
     fun clear() {
         slots = emptyList()
         projector = null
-        selectedLineIds.clear()
+        selectedWordKeys.clear()
         invalidate()
     }
 
@@ -90,76 +111,98 @@ class LiveTextOverlay @JvmOverloads constructor(
     }
 
     fun selectAll() {
-        selectedLineIds.clear()
-        for (slot in slots) selectedLineIds.add(slot.source.lineId)
-        onSelectionChanged(selectedLineIds.size)
+        selectedWordKeys.clear()
+        for (i in slots.indices) selectedWordKeys.add(i)
+        onSelectionChanged(selectedWordKeys.size)
         invalidate()
     }
 
+    /**
+     * Build copied text in reading order: walk slots in OCR order, group
+     * by line, then by block. Inserts a single newline between lines and
+     * a blank line between blocks.
+     */
     fun selectedText(): String {
-        if (selectedLineIds.isEmpty()) return ""
-        // Preserve original reading order by walking slots, then group by block
-        // so newlines slip in where the OCR found a block break.
-        val byBlock = LinkedHashMap<Int, MutableList<String>>()
-        for (slot in slots) {
-            if (slot.source.lineId in selectedLineIds) {
-                byBlock.getOrPut(slot.source.blockId) { ArrayList() }
-                    .add(slot.source.text)
+        if (selectedWordKeys.isEmpty()) return ""
+        val sb = StringBuilder()
+        var lastLineId = Int.MIN_VALUE
+        var lastBlockId = Int.MIN_VALUE
+        var firstWord = true
+        for ((idx, slot) in slots.withIndex()) {
+            if (idx !in selectedWordKeys) continue
+            val w = slot.source
+            if (firstWord) {
+                firstWord = false
+            } else if (w.blockId != lastBlockId) {
+                sb.append("\n\n")
+            } else if (w.lineId != lastLineId) {
+                sb.append('\n')
+            } else {
+                sb.append(' ')
             }
+            sb.append(w.text)
+            lastLineId = w.lineId
+            lastBlockId = w.blockId
         }
-        return byBlock.values
-            .joinToString("\n\n") { it.joinToString("\n") }
+        return sb.toString()
     }
 
     override fun onDraw(canvas: Canvas) {
         if (slots.isEmpty()) return
-        // First pass: outline everything so user sees what's tappable.
+        // First pass: thin outline around every word so user sees what's
+        // tappable.
         for (slot in slots) {
             if (slot.viewBounds.isEmpty) continue
             canvas.drawRoundRect(slot.viewBounds, cornerRadius, cornerRadius, outlinePaint)
         }
-        // Second pass: fill + thicker outline on selected lines.
-        if (selectedLineIds.isNotEmpty()) {
-            for (slot in slots) {
-                if (slot.source.lineId !in selectedLineIds) continue
-                if (slot.viewBounds.isEmpty) continue
-                canvas.drawRoundRect(slot.viewBounds, cornerRadius, cornerRadius, fillPaint)
-                canvas.drawRoundRect(slot.viewBounds, cornerRadius, cornerRadius, selectedOutlinePaint)
-            }
+        // Second pass: filled highlight + thicker outline on selected.
+        if (selectedWordKeys.isEmpty()) return
+        for ((idx, slot) in slots.withIndex()) {
+            if (idx !in selectedWordKeys) continue
+            if (slot.viewBounds.isEmpty) continue
+            canvas.drawRoundRect(slot.viewBounds, cornerRadius, cornerRadius, fillPaint)
+            canvas.drawRoundRect(slot.viewBounds, cornerRadius, cornerRadius, selectedOutlinePaint)
         }
     }
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
         if (slots.isEmpty()) return false
-        if (event.actionMasked != MotionEvent.ACTION_UP) {
-            // Consume DOWN so the host pager doesn't start a horizontal drag,
-            // but only commit selection on UP.
-            return event.actionMasked == MotionEvent.ACTION_DOWN
-        }
-        // Slight padding so finger-fat doesn't miss a small line.
+        gestureDetector.onTouchEvent(event)
+        // Consume the stream so the underlying photo view doesn't pan/zoom.
+        return true
+    }
+
+    private fun handleTap(x: Float, y: Float, selectWholeLine: Boolean) {
+        // Slight padding so finger-fat doesn't miss a small word.
         val pad = dp(6f)
-        val x = event.x
-        val y = event.y
-        val hit = slots.firstOrNull {
+        val hitIdx = slots.indexOfFirst {
             val b = it.viewBounds
             !b.isEmpty &&
                 x >= b.left - pad && x <= b.right + pad &&
                 y >= b.top - pad && y <= b.bottom + pad
         }
-        if (hit == null) {
+        if (hitIdx < 0) {
             onMissTap()
-            return true
+            return
         }
-        // Toggle selection on tap so a second tap on the same line clears it.
-        val id = hit.source.lineId
-        if (id in selectedLineIds) {
-            selectedLineIds.remove(id)
+        val hit = slots[hitIdx]
+        if (selectWholeLine) {
+            // Add every word in the same line. Don't deselect anything —
+            // double-tap-to-extend feels broken if it also strips state.
+            val lineId = hit.source.lineId
+            for ((idx, s) in slots.withIndex()) {
+                if (s.source.lineId == lineId) selectedWordKeys.add(idx)
+            }
         } else {
-            selectedLineIds.add(id)
+            // Single tap toggles the individual word.
+            if (hitIdx in selectedWordKeys) {
+                selectedWordKeys.remove(hitIdx)
+            } else {
+                selectedWordKeys.add(hitIdx)
+            }
         }
-        onSelectionChanged(selectedLineIds.size)
+        onSelectionChanged(selectedWordKeys.size)
         invalidate()
-        return true
     }
 
     private fun dp(value: Float): Float = value * resources.displayMetrics.density

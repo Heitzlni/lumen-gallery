@@ -989,16 +989,25 @@ class PhotoFragment : ViewPagerFragment() {
             return
         }
 
+        // Cache hit short-circuits before the toast so we don't flash
+        // "Scanning…" when re-entering Live Text on the same photo.
+        val cachedFast = org.fossify.gallery.helpers.OcrRecognizer.recognize(activity, path)
+            ?.takeIf { it.words.isNotEmpty() }
+        if (cachedFast != null) {
+            enterLiveText(cachedFast.words, projector)
+            return
+        }
+
         activity.toast(R.string.live_text_scanning)
         org.fossify.commons.helpers.ensureBackgroundThread {
             val result = org.fossify.gallery.helpers.OcrRecognizer.recognize(activity, path)
             activity.runOnUiThread {
                 if (this.activity == null || this.activity?.isFinishing == true) return@runOnUiThread
-                if (result == null || result.lines.isEmpty()) {
+                if (result == null || result.words.isEmpty()) {
                     activity.toast(R.string.live_text_no_text)
                     return@runOnUiThread
                 }
-                enterLiveText(result.lines, projector)
+                enterLiveText(result.words, projector)
             }
         }
     }
@@ -1025,13 +1034,13 @@ class PhotoFragment : ViewPagerFragment() {
     }
 
     private fun enterLiveText(
-        lines: List<org.fossify.gallery.helpers.OcrRecognizer.Line>,
+        words: List<org.fossify.gallery.helpers.OcrRecognizer.Word>,
         projector: (android.graphics.Rect) -> android.graphics.RectF?,
     ) {
         val activity = activity ?: return
         mLiveTextActive = true
 
-        binding.liveTextOverlay.setRecognition(lines, projector)
+        binding.liveTextOverlay.setRecognition(words, projector)
         binding.liveTextOverlay.beVisible()
         binding.liveTextBar.beVisible()
         binding.liveTextCopy.isEnabled = false
