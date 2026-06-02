@@ -9,35 +9,41 @@ import android.graphics.RectF
 import android.os.SystemClock
 import android.util.AttributeSet
 import android.view.Choreographer
-import android.view.MotionEvent
 import android.view.View
-import android.view.ViewConfiguration
 import org.fossify.gallery.helpers.OcrRecognizer
 
 /**
- * Apple-style Live Text overlay. Sits transparently above the photo and
- * draws faint outlines around every recognized word.
+ * Apple-style Live Text overlay — draw-only. Tap routing happens in
+ * `PhotoFragment` via a [android.view.GestureDetector] attached to the
+ * underlying image view, which calls back into [hitTestAndSelect].
  *
- * Selection grows progressively with repeat taps on the same word inside
- * a ~400ms window (matches macOS / iOS behavior):
- *   - 1 tap   → that word
- *   - 2 taps  → expand to the entire line
- *   - 3 taps  → expand to the entire block (paragraph)
+ * Why not handle touches in the overlay itself? Because the overlay
+ * sits on top of the photo and Android touch dispatch is winner-takes-
+ * all per gesture stream — if the overlay captures `ACTION_DOWN` it
+ * also "owns" any subsequent `ACTION_POINTER_DOWN` (= second finger
+ * for pinch-zoom). That killed zoom for any pinch that started on a
+ * word. With the overlay non-clickable, all touches naturally reach
+ * the image view; pan and pinch work normally. The host runs a
+ * Choreographer loop while the overlay is visible so the word rects
+ * follow the photo as it scales.
  *
- * Taps that land OUTSIDE every word are not consumed — they bubble back
- * to the underlying image view so the user can still pan and pinch-zoom
- * while Live Text is up. The host fragment runs a Choreographer-driven
- * `refreshProjection` loop while the overlay is visible so the rects
- * track the words as the photo scales.
- *
- * Exit is via the floating action bar's close button (no longer "tap
- * empty area to exit", which would conflict with pass-through pan/zoom).
+ * Selection model — repeated taps on the SAME word within ~400 ms:
+ *   - 1 tap → that word
+ *   - 2 taps → expand to the whole line
+ *   - 3 taps → expand to the whole block
+ * Tapping a DIFFERENT word adds it to the selection. Tapping an
+ * already-selected word AFTER the window expires toggles it off.
  */
 class LiveTextOverlay @JvmOverloads constructor(
     context: Context,
     attrs: AttributeSet? = null,
     defStyle: Int = 0,
 ) : View(context, attrs, defStyle) {
+
+    init {
+        isClickable = false
+        isFocusable = false
+    }
 
     private data class Slot(
         val source: OcrRecognizer.Word,
@@ -66,13 +72,6 @@ class LiveTextOverlay @JvmOverloads constructor(
     }
 
     private val cornerRadius = dp(4f)
-    private val touchSlop = ViewConfiguration.get(context).scaledTouchSlop.toFloat()
-
-    // Touch state for the current sequence.
-    private var downX = 0f
-    private var downY = 0f
-    private var downHitIdx = -1
-    private var movedBeyondSlop = false
 
     // Multi-tap state.
     private var lastTapWordIdx = -1
@@ -185,48 +184,18 @@ class LiveTextOverlay @JvmOverloads constructor(
         }
     }
 
-    override fun onTouchEvent(event: MotionEvent): Boolean {
+    /**
+     * Called by the host fragment when the user single-taps the underlying
+     * image view while Live Text is active. Returns true if a word was
+     * hit (caller should suppress the chrome-toggle click), false if the
+     * tap missed every word.
+     */
+    fun hitTestAndSelect(x: Float, y: Float): Boolean {
         if (slots.isEmpty()) return false
-        when (event.actionMasked) {
-            MotionEvent.ACTION_DOWN -> {
-                downX = event.x
-                downY = event.y
-                downHitIdx = findWordAt(event.x, event.y)
-                movedBeyondSlop = false
-                // If DOWN lands on a word, capture the stream to do tap
-                // detection. If not, fall through so the underlying image
-                // view can handle pan/zoom.
-                return downHitIdx >= 0
-            }
-            MotionEvent.ACTION_MOVE -> {
-                if (downHitIdx < 0) return false
-                if (!movedBeyondSlop) {
-                    val dx = event.x - downX
-                    val dy = event.y - downY
-                    if (dx * dx + dy * dy > touchSlop * touchSlop) {
-                        // User started dragging — give up our hit so the
-                        // image view doesn't fight us. We don't get the
-                        // remainder of this stream back, but the *next*
-                        // DOWN will reset state cleanly.
-                        movedBeyondSlop = true
-                        downHitIdx = -1
-                    }
-                }
-                return downHitIdx >= 0
-            }
-            MotionEvent.ACTION_UP -> {
-                val idx = downHitIdx
-                downHitIdx = -1
-                if (idx < 0 || movedBeyondSlop) return false
-                applyMultiTap(idx)
-                return true
-            }
-            MotionEvent.ACTION_CANCEL -> {
-                downHitIdx = -1
-                return false
-            }
-        }
-        return false
+        val idx = findWordAt(x, y)
+        if (idx < 0) return false
+        applyMultiTap(idx)
+        return true
     }
 
     private fun findWordAt(x: Float, y: Float): Int {

@@ -4,6 +4,11 @@
     xmlns:tools="http://schemas.android.com/tools"
     tools:ignore="AppCompatResource">
     <item
+        android:id="@+id/play_all_videos"
+        android:icon="@drawable/ic_play_vector"
+        android:title="@string/play_all_videos"
+        app:showAsAction="always" />
+    <item
         android:id="@+id/toggle_filename"
         android:icon="@drawable/ic_label_vector"
         android:title="@string/toggle_filename"

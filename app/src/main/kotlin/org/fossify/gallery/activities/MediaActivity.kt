@@ -423,6 +423,7 @@ class MediaActivity : SimpleActivity(), MediaOperationsListener {
                 R.id.settings -> launchSettings()
                 R.id.about -> launchAbout()
                 R.id.open_vault -> tryOpenVault()
+                R.id.play_all_videos -> openPlaylistChooser()
                 else -> return@setOnMenuItemClickListener false
             }
             return@setOnMenuItemClickListener true
@@ -1074,6 +1075,14 @@ class MediaActivity : SimpleActivity(), MediaOperationsListener {
     }
 
     private fun openInViewPager(path: String) {
+        // If the user opens something OUTSIDE the active playlist queue,
+        // they intend to play THIS clip, not the rest of the playlist.
+        // Drop the queue so end-of-video doesn't auto-advance.
+        if (org.fossify.gallery.helpers.PlaybackQueue.isActive &&
+            !org.fossify.gallery.helpers.PlaybackQueue.contains(path)
+        ) {
+            org.fossify.gallery.helpers.PlaybackQueue.clear()
+        }
         Intent(this, ViewPagerActivity::class.java).apply {
             putExtra(SKIP_AUTHENTICATION, shouldSkipAuthentication())
             putExtra(PATH, path)
@@ -1083,6 +1092,35 @@ class MediaActivity : SimpleActivity(), MediaOperationsListener {
             putExtra(IS_FROM_GALLERY, true)
             startActivity(this)
         }
+    }
+
+    private fun openPlaylistChooser() {
+        val videos = mMedia
+            .filterIsInstance<Medium>()
+            .filter { it.isVideo() }
+            .map { it.path }
+        if (videos.isEmpty()) {
+            toast(R.string.playback_queue_no_videos)
+            return
+        }
+        val items = arrayListOf(
+            org.fossify.commons.models.RadioItem(0, getString(R.string.playback_queue_play_in_order)),
+            org.fossify.commons.models.RadioItem(1, getString(R.string.playback_queue_shuffle)),
+        )
+        org.fossify.commons.dialogs.RadioGroupDialog(this, items) { result ->
+            val shuffle = (result as Int) == 1
+            startPlaylist(videos, shuffle)
+        }
+    }
+
+    private fun startPlaylist(videos: List<String>, shuffle: Boolean) {
+        org.fossify.gallery.helpers.PlaybackQueue.setQueue(videos, shuffle)
+        // Walk the cursor to the first item — next(null) returns ordered[0]
+        // and parks the head at index 0 so subsequent auto-advances step
+        // through the rest in (possibly shuffled) order.
+        val first = org.fossify.gallery.helpers.PlaybackQueue.next(null) ?: return
+        toast(getString(R.string.playback_queue_started, videos.size))
+        openInViewPager(first)
     }
 
     private fun openSystemDefaultPlayer(path: String) {
