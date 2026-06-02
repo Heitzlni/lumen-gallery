@@ -242,34 +242,42 @@ class LiveTextOverlay @JvmOverloads constructor(
     }
 
     /**
-     * Apple-style progressive selection: tap a word, tap it again to
-     * expand to the line, tap it once more to expand to the block. A
-     * tap on a DIFFERENT word resets the counter (so it selects only
-     * that new word, not "extend selection across both").
+     * Selection model:
+     *   - Tap a NEW word → add it to the current selection (prior picks stay).
+     *   - Tap the SAME word again within ~400 ms → grow that word into its
+     *     whole line; tap it once more → grow into its whole block. Other
+     *     prior selections are preserved.
+     *   - Tap a previously-selected word AFTER the multi-tap window has
+     *     expired → toggle it off (so deselection is still possible).
      */
     private fun applyMultiTap(wordIdx: Int) {
         val now = SystemClock.uptimeMillis()
         val sameWord = wordIdx == lastTapWordIdx &&
             (now - lastTapTime) <= multiTapWindowMs
-        tapCount = if (sameWord) (tapCount + 1).coerceAtMost(3) else 1
-        lastTapWordIdx = wordIdx
-        lastTapTime = now
 
-        val word = slots[wordIdx].source
-        selectedWordKeys.clear()
-        when (tapCount) {
-            1 -> selectedWordKeys.add(wordIdx)
-            2 -> {
-                for ((i, s) in slots.withIndex()) {
+        if (sameWord) {
+            tapCount = (tapCount + 1).coerceAtMost(3)
+            val word = slots[wordIdx].source
+            when (tapCount) {
+                2 -> for ((i, s) in slots.withIndex()) {
                     if (s.source.lineId == word.lineId) selectedWordKeys.add(i)
                 }
-            }
-            else -> {
-                for ((i, s) in slots.withIndex()) {
+                3 -> for ((i, s) in slots.withIndex()) {
                     if (s.source.blockId == word.blockId) selectedWordKeys.add(i)
                 }
             }
+        } else {
+            tapCount = 1
+            if (wordIdx in selectedWordKeys) {
+                // Same word, but the multi-tap window expired — treat as toggle-off.
+                selectedWordKeys.remove(wordIdx)
+            } else {
+                selectedWordKeys.add(wordIdx)
+            }
         }
+
+        lastTapWordIdx = wordIdx
+        lastTapTime = now
         onSelectionChanged(selectedWordKeys.size)
         invalidate()
     }
