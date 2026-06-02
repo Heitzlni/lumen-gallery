@@ -6,25 +6,32 @@ import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.Rect
 import android.graphics.RectF
+import android.os.SystemClock
 import android.util.AttributeSet
-import android.view.GestureDetector
+import android.view.Choreographer
 import android.view.MotionEvent
 import android.view.View
+import android.view.ViewConfiguration
 import org.fossify.gallery.helpers.OcrRecognizer
 
 /**
- * Apple-style Live Text overlay. Sits transparently above the photo,
- * draws faint outlines around every recognized *word*, and highlights
- * the tapped words.
+ * Apple-style Live Text overlay. Sits transparently above the photo and
+ * draws faint outlines around every recognized word.
  *
- * Granularity:
- *   - Single tap on a word → toggle just that word.
- *   - Double tap on a word → select the entire line that word belongs to.
- *   - Tap outside any word → exit Live Text (reported via [onMissTap]).
+ * Selection grows progressively with repeat taps on the same word inside
+ * a ~400ms window (matches macOS / iOS behavior):
+ *   - 1 tap   → that word
+ *   - 2 taps  → expand to the entire line
+ *   - 3 taps  → expand to the entire block (paragraph)
  *
- * Coordinate translation from source-image pixels to view pixels is
- * plugged in from outside — the overlay does not know whether the
- * image is rendered by `SubsamplingScaleImageView` or `GestureImageView`.
+ * Taps that land OUTSIDE every word are not consumed — they bubble back
+ * to the underlying image view so the user can still pan and pinch-zoom
+ * while Live Text is up. The host fragment runs a Choreographer-driven
+ * `refreshProjection` loop while the overlay is visible so the rects
+ * track the words as the photo scales.
+ *
+ * Exit is via the floating action bar's close button (no longer "tap
+ * empty area to exit", which would conflict with pass-through pan/zoom).
  */
 class LiveTextOverlay @JvmOverloads constructor(
     context: Context,
@@ -41,14 +48,7 @@ class LiveTextOverlay @JvmOverloads constructor(
     private var projector: ((Rect) -> RectF?)? = null
     private val selectedWordKeys = HashSet<Int>()
 
-    /**
-     * Called after a tap is consumed by the overlay. Receives the number
-     * of currently-selected words.
-     */
     var onSelectionChanged: (selectedCount: Int) -> Unit = {}
-
-    /** Called when the user tapped outside any text element. */
-    var onMissTap: () -> Unit = {}
 
     private val outlinePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
@@ -57,7 +57,7 @@ class LiveTextOverlay @JvmOverloads constructor(
     }
     private val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.FILL
-        color = Color.parseColor("#66FFD740") // amber, ~40% opacity
+        color = Color.parseColor("#66FFD740")
     }
     private val selectedOutlinePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
@@ -66,30 +66,56 @@ class LiveTextOverlay @JvmOverloads constructor(
     }
 
     private val cornerRadius = dp(4f)
+    private val touchSlop = ViewConfiguration.get(context).scaledTouchSlop.toFloat()
 
-    // Word identity within a session = its order in [slots]. Stable
-    // because we never mutate the list after setRecognition.
-    private val Slot.key: Int get() = slots.indexOf(this)
+    // Touch state for the current sequence.
+    private var downX = 0f
+    private var downY = 0f
+    private var downHitIdx = -1
+    private var movedBeyondSlop = false
 
-    private val gestureDetector: GestureDetector = GestureDetector(
-        context,
-        object : GestureDetector.SimpleOnGestureListener() {
-            override fun onSingleTapConfirmed(e: MotionEvent): Boolean {
-                handleTap(e.x, e.y, selectWholeLine = false)
-                return true
-            }
+    // Multi-tap state.
+    private var lastTapWordIdx = -1
+    private var lastTapTime = 0L
+    private var tapCount = 0
 
-            override fun onDoubleTap(e: MotionEvent): Boolean {
-                handleTap(e.x, e.y, selectWholeLine = true)
-                return true
-            }
-        },
-    )
+    private val multiTapWindowMs = 400L
+
+    // Choreographer frame-callback: while visible, keep the rects in sync
+    // with whatever pan/zoom the underlying image view is doing.
+    private val frameCallback = object : Choreographer.FrameCallback {
+        override fun doFrame(frameTimeNanos: Long) {
+            if (!isAttachedToWindow || visibility != VISIBLE) return
+            refreshProjection()
+            Choreographer.getInstance().postFrameCallback(this)
+        }
+    }
+
+    override fun onAttachedToWindow() {
+        super.onAttachedToWindow()
+        if (visibility == VISIBLE) Choreographer.getInstance().postFrameCallback(frameCallback)
+    }
+
+    override fun onDetachedFromWindow() {
+        super.onDetachedFromWindow()
+        Choreographer.getInstance().removeFrameCallback(frameCallback)
+    }
+
+    override fun onVisibilityChanged(changedView: View, visibility: Int) {
+        super.onVisibilityChanged(changedView, visibility)
+        if (visibility == VISIBLE && isAttachedToWindow) {
+            Choreographer.getInstance().postFrameCallback(frameCallback)
+        } else {
+            Choreographer.getInstance().removeFrameCallback(frameCallback)
+        }
+    }
 
     fun setRecognition(words: List<OcrRecognizer.Word>, projector: (Rect) -> RectF?) {
         this.slots = words.map { Slot(it, RectF()) }
         this.projector = projector
         selectedWordKeys.clear()
+        lastTapWordIdx = -1
+        tapCount = 0
         onSelectionChanged(0)
         refreshProjection()
     }
@@ -98,6 +124,8 @@ class LiveTextOverlay @JvmOverloads constructor(
         slots = emptyList()
         projector = null
         selectedWordKeys.clear()
+        lastTapWordIdx = -1
+        tapCount = 0
         invalidate()
     }
 
@@ -117,11 +145,6 @@ class LiveTextOverlay @JvmOverloads constructor(
         invalidate()
     }
 
-    /**
-     * Build copied text in reading order: walk slots in OCR order, group
-     * by line, then by block. Inserts a single newline between lines and
-     * a blank line between blocks.
-     */
     fun selectedText(): String {
         if (selectedWordKeys.isEmpty()) return ""
         val sb = StringBuilder()
@@ -149,13 +172,10 @@ class LiveTextOverlay @JvmOverloads constructor(
 
     override fun onDraw(canvas: Canvas) {
         if (slots.isEmpty()) return
-        // First pass: thin outline around every word so user sees what's
-        // tappable.
         for (slot in slots) {
             if (slot.viewBounds.isEmpty) continue
             canvas.drawRoundRect(slot.viewBounds, cornerRadius, cornerRadius, outlinePaint)
         }
-        // Second pass: filled highlight + thicker outline on selected.
         if (selectedWordKeys.isEmpty()) return
         for ((idx, slot) in slots.withIndex()) {
             if (idx !in selectedWordKeys) continue
@@ -167,38 +187,87 @@ class LiveTextOverlay @JvmOverloads constructor(
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
         if (slots.isEmpty()) return false
-        gestureDetector.onTouchEvent(event)
-        // Consume the stream so the underlying photo view doesn't pan/zoom.
-        return true
+        when (event.actionMasked) {
+            MotionEvent.ACTION_DOWN -> {
+                downX = event.x
+                downY = event.y
+                downHitIdx = findWordAt(event.x, event.y)
+                movedBeyondSlop = false
+                // If DOWN lands on a word, capture the stream to do tap
+                // detection. If not, fall through so the underlying image
+                // view can handle pan/zoom.
+                return downHitIdx >= 0
+            }
+            MotionEvent.ACTION_MOVE -> {
+                if (downHitIdx < 0) return false
+                if (!movedBeyondSlop) {
+                    val dx = event.x - downX
+                    val dy = event.y - downY
+                    if (dx * dx + dy * dy > touchSlop * touchSlop) {
+                        // User started dragging — give up our hit so the
+                        // image view doesn't fight us. We don't get the
+                        // remainder of this stream back, but the *next*
+                        // DOWN will reset state cleanly.
+                        movedBeyondSlop = true
+                        downHitIdx = -1
+                    }
+                }
+                return downHitIdx >= 0
+            }
+            MotionEvent.ACTION_UP -> {
+                val idx = downHitIdx
+                downHitIdx = -1
+                if (idx < 0 || movedBeyondSlop) return false
+                applyMultiTap(idx)
+                return true
+            }
+            MotionEvent.ACTION_CANCEL -> {
+                downHitIdx = -1
+                return false
+            }
+        }
+        return false
     }
 
-    private fun handleTap(x: Float, y: Float, selectWholeLine: Boolean) {
-        // Slight padding so finger-fat doesn't miss a small word.
+    private fun findWordAt(x: Float, y: Float): Int {
         val pad = dp(6f)
-        val hitIdx = slots.indexOfFirst {
-            val b = it.viewBounds
-            !b.isEmpty &&
-                x >= b.left - pad && x <= b.right + pad &&
+        for (i in slots.indices) {
+            val b = slots[i].viewBounds
+            if (b.isEmpty) continue
+            if (x >= b.left - pad && x <= b.right + pad &&
                 y >= b.top - pad && y <= b.bottom + pad
+            ) return i
         }
-        if (hitIdx < 0) {
-            onMissTap()
-            return
-        }
-        val hit = slots[hitIdx]
-        if (selectWholeLine) {
-            // Add every word in the same line. Don't deselect anything —
-            // double-tap-to-extend feels broken if it also strips state.
-            val lineId = hit.source.lineId
-            for ((idx, s) in slots.withIndex()) {
-                if (s.source.lineId == lineId) selectedWordKeys.add(idx)
+        return -1
+    }
+
+    /**
+     * Apple-style progressive selection: tap a word, tap it again to
+     * expand to the line, tap it once more to expand to the block. A
+     * tap on a DIFFERENT word resets the counter (so it selects only
+     * that new word, not "extend selection across both").
+     */
+    private fun applyMultiTap(wordIdx: Int) {
+        val now = SystemClock.uptimeMillis()
+        val sameWord = wordIdx == lastTapWordIdx &&
+            (now - lastTapTime) <= multiTapWindowMs
+        tapCount = if (sameWord) (tapCount + 1).coerceAtMost(3) else 1
+        lastTapWordIdx = wordIdx
+        lastTapTime = now
+
+        val word = slots[wordIdx].source
+        selectedWordKeys.clear()
+        when (tapCount) {
+            1 -> selectedWordKeys.add(wordIdx)
+            2 -> {
+                for ((i, s) in slots.withIndex()) {
+                    if (s.source.lineId == word.lineId) selectedWordKeys.add(i)
+                }
             }
-        } else {
-            // Single tap toggles the individual word.
-            if (hitIdx in selectedWordKeys) {
-                selectedWordKeys.remove(hitIdx)
-            } else {
-                selectedWordKeys.add(hitIdx)
+            else -> {
+                for ((i, s) in slots.withIndex()) {
+                    if (s.source.blockId == word.blockId) selectedWordKeys.add(i)
+                }
             }
         }
         onSelectionChanged(selectedWordKeys.size)

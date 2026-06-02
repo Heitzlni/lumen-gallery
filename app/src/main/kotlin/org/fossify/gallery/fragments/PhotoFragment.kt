@@ -967,12 +967,15 @@ class PhotoFragment : ViewPagerFragment() {
     }
 
     private var mLiveTextActive = false
+    private var mLiveTextForcedFullscreen = false
 
     /** Apple-style Live Text. Long-press → run OCR with bounding boxes,
-     *  overlay highlight rects on each detected line at the photo's current
-     *  zoom/pan state, freeze interaction underneath (the overlay covers
-     *  the viewport so the image view never receives any MotionEvents),
-     *  and expose Copy / Select All / Close.
+     *  overlay highlight rects on each detected word at the photo's
+     *  current zoom/pan state. The overlay only captures taps that land
+     *  on a word; everything else passes through so the user can still
+     *  pinch-zoom underneath. While the overlay is up, a Choreographer
+     *  loop in the view re-projects the word rects every frame so they
+     *  track the photo as it scales.
      *
      *  GIFs and animated formats fall back to the simpler bottom-sheet
      *  dialog because we don't have a stable projector for those. */
@@ -1040,6 +1043,17 @@ class PhotoFragment : ViewPagerFragment() {
         val activity = activity ?: return
         mLiveTextActive = true
 
+        // Hide the top toolbar + bottom action bar so the floating Live
+        // Text bar isn't obscured by the photo's filename. fragmentClicked
+        // toggles fullscreen — only call it if we're not already in
+        // fullscreen, and remember so we can restore on exit.
+        if (!mIsFullscreen) {
+            mLiveTextForcedFullscreen = true
+            listener?.fragmentClicked()
+        } else {
+            mLiveTextForcedFullscreen = false
+        }
+
         binding.liveTextOverlay.setRecognition(words, projector)
         binding.liveTextOverlay.beVisible()
         binding.liveTextBar.beVisible()
@@ -1047,9 +1061,6 @@ class PhotoFragment : ViewPagerFragment() {
 
         binding.liveTextOverlay.onSelectionChanged = { count ->
             binding.liveTextCopy.isEnabled = count > 0
-        }
-        binding.liveTextOverlay.onMissTap = {
-            exitLiveText()
         }
         binding.liveTextClose.setOnClickListener { exitLiveText() }
         binding.liveTextSelectAll.setOnClickListener {
@@ -1074,6 +1085,12 @@ class PhotoFragment : ViewPagerFragment() {
         binding.liveTextOverlay.clear()
         binding.liveTextOverlay.beGone()
         binding.liveTextBar.beGone()
+        if (mLiveTextForcedFullscreen && mIsFullscreen) {
+            mLiveTextForcedFullscreen = false
+            listener?.fragmentClicked()
+        } else {
+            mLiveTextForcedFullscreen = false
+        }
     }
 
     private fun updateInstantSwitchWidths() {

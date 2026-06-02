@@ -188,6 +188,11 @@ class ViewPagerActivity : BaseViewerActivity(), ViewPager.OnPageChangeListener, 
     companion object {
         private const val REQUEST_VIEW_VIDEO = 1
         private const val SAVED_PATH = "current_path"
+        private const val PIP_ACTION = "org.fossify.gallery.PIP_ACTION"
+        private const val PIP_EXTRA = "pip_what"
+        private const val PIP_TOGGLE = "toggle"
+        private const val PIP_NEXT = "next"
+        private const val PIP_PREV = "prev"
     }
 
     private var mPath = ""
@@ -234,9 +239,22 @@ class ViewPagerActivity : BaseViewerActivity(), ViewPager.OnPageChangeListener, 
         (MediaActivity.mMedia.clone() as ArrayList<ThumbnailItem>).filterIsInstanceTo(mMediaFiles, Medium::class.java)
 
         requestMediaPermissions {
-            initViewPager(
-                savedPath = savedInstanceState?.getString(SAVED_PATH).orEmpty()
+            val intentPath = intent.getStringExtra(PATH).orEmpty()
+            val savedPath = savedInstanceState?.getString(SAVED_PATH).orEmpty()
+            android.util.Log.d(
+                "ViewPagerActivity",
+                "onCreate — intentPath=$intentPath savedPath=$savedPath savedInstanceState=${savedInstanceState != null}"
             )
+            // savedInstanceState's SAVED_PATH is great for surviving rotation,
+            // but it's also restored after the system kills a PiP'd activity
+            // and revives it later when the user clicks a DIFFERENT video.
+            // In that case the stale saved path was winning over the fresh
+            // intent path — old video opened. If the intent has a real path
+            // and it doesn't match the saved one, the user just clicked
+            // something new; treat the saved state as stale.
+            val effectiveSavedPath =
+                if (intentPath.isNotEmpty() && intentPath != savedPath) "" else savedPath
+            initViewPager(savedPath = effectiveSavedPath)
         }
 
         initFavorites()
@@ -253,14 +271,10 @@ class ViewPagerActivity : BaseViewerActivity(), ViewPager.OnPageChangeListener, 
         )
         if (newPath.isNullOrEmpty() || newPath == mPath) return
 
-        // launchMode=singleTask means a "click a different video while the
-        // previous one is still resident in the back stack" delivers the
-        // new intent here instead of recreating us. In-place reinit kept
-        // the old ViewPager adapter (and its cached VideoFragment) alive,
-        // so the old clip stayed on screen. recreate() rebuilds the whole
-        // activity with the new intent → fresh adapter, fresh fragment,
-        // right video on the first tap. Release the old player first so
-        // its audio doesn't bleed through the swap.
+        // Force the activity to rebuild with the new intent. recreate()
+        // will dispatch onCreate again; the onCreate path comparison
+        // above ensures SAVED_PATH from the previous instance doesn't
+        // shadow the new intent's PATH.
         (getCurrentFragment() as? org.fossify.gallery.fragments.VideoFragment)
             ?.releaseFromPip()
         recreate()
@@ -271,6 +285,16 @@ class ViewPagerActivity : BaseViewerActivity(), ViewPager.OnPageChangeListener, 
         if (!hasPermission(getPermissionToRequest())) {
             finish()
             return
+        }
+
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+            val filter = android.content.IntentFilter(PIP_ACTION)
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                registerReceiver(mPipActionReceiver, filter, RECEIVER_NOT_EXPORTED)
+            } else {
+                @Suppress("UnspecifiedRegisterReceiverFlag")
+                registerReceiver(mPipActionReceiver, filter)
+            }
         }
 
         initBottomActions()
@@ -304,6 +328,87 @@ class ViewPagerActivity : BaseViewerActivity(), ViewPager.OnPageChangeListener, 
     override fun onPause() {
         super.onPause()
         stopSlideshow()
+        try {
+            unregisterReceiver(mPipActionReceiver)
+        } catch (_: Exception) {
+        }
+    }
+
+    // ---- PiP RemoteActions: prev / play-pause / next ---------------------
+
+    private val mPipActionReceiver = object : android.content.BroadcastReceiver() {
+        override fun onReceive(c: android.content.Context, intent: android.content.Intent) {
+            if (intent.action != PIP_ACTION) return
+            when (intent.getStringExtra(PIP_EXTRA)) {
+                PIP_TOGGLE -> {
+                    (getCurrentFragment() as? org.fossify.gallery.fragments.VideoFragment)
+                        ?.togglePlayPauseFromPip()
+                    updatePipActions()
+                }
+                PIP_NEXT -> {
+                    val vp = binding.viewPager
+                    if (vp.currentItem < (vp.adapter?.count ?: 0) - 1) {
+                        vp.setCurrentItem(vp.currentItem + 1, false)
+                    }
+                    updatePipActions()
+                }
+                PIP_PREV -> {
+                    val vp = binding.viewPager
+                    if (vp.currentItem > 0) {
+                        vp.setCurrentItem(vp.currentItem - 1, false)
+                    }
+                    updatePipActions()
+                }
+            }
+        }
+    }
+
+    /** Called by VideoFragment whenever its play state flips so the
+     *  PiP overlay's play/pause icon stays in sync. */
+    fun updatePipActions() {
+        if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.O) return
+        if (!isInPictureInPictureMode) return
+        try {
+            setPictureInPictureParams(buildPipParams())
+        } catch (_: Exception) {
+        }
+    }
+
+    @androidx.annotation.RequiresApi(android.os.Build.VERSION_CODES.O)
+    private fun buildPipParams(): android.app.PictureInPictureParams {
+        val isPlaying = (getCurrentFragment() as? org.fossify.gallery.fragments.VideoFragment)
+            ?.isCurrentlyPlaying() == true
+        val actions = listOf(
+            buildPipAction(PIP_PREV, android.R.drawable.ic_media_previous, "Previous", 1),
+            buildPipAction(
+                PIP_TOGGLE,
+                if (isPlaying) android.R.drawable.ic_media_pause else android.R.drawable.ic_media_play,
+                if (isPlaying) "Pause" else "Play",
+                2,
+            ),
+            buildPipAction(PIP_NEXT, android.R.drawable.ic_media_next, "Next", 3),
+        )
+        return android.app.PictureInPictureParams.Builder()
+            .setActions(actions)
+            .build()
+    }
+
+    @androidx.annotation.RequiresApi(android.os.Build.VERSION_CODES.O)
+    private fun buildPipAction(
+        id: String,
+        @androidx.annotation.DrawableRes iconRes: Int,
+        title: String,
+        requestCode: Int,
+    ): android.app.RemoteAction {
+        val intent = android.content.Intent(PIP_ACTION).apply {
+            setPackage(packageName)
+            putExtra(PIP_EXTRA, id)
+        }
+        val flags = android.app.PendingIntent.FLAG_UPDATE_CURRENT or
+            android.app.PendingIntent.FLAG_IMMUTABLE
+        val pending = android.app.PendingIntent.getBroadcast(this, requestCode, intent, flags)
+        val icon = Icon.createWithResource(this, iconRes)
+        return android.app.RemoteAction(icon, title, title, pending)
     }
 
     private fun launchEditOrTrim() {
@@ -330,7 +435,7 @@ class ViewPagerActivity : BaseViewerActivity(), ViewPager.OnPageChangeListener, 
         val frag = getCurrentFragment() as? org.fossify.gallery.fragments.VideoFragment
         if (frag == null || !frag.isCurrentlyPlaying()) return
         try {
-            enterPictureInPictureMode(android.app.PictureInPictureParams.Builder().build())
+            enterPictureInPictureMode(buildPipParams())
         } catch (_: Exception) {
             // PiP not available on this device / state
         }
