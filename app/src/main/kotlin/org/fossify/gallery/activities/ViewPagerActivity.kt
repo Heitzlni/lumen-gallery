@@ -1710,8 +1710,41 @@ class ViewPagerActivity : BaseViewerActivity(), ViewPager.OnPageChangeListener, 
     override fun videoEnded(): Boolean {
         if (mIsSlideshowActive) {
             swipeToNextMedium()
+            return true
         }
-        return mIsSlideshowActive
+        // Playlist auto-advance: walk the queue cursor from whichever
+        // path just ended. Return true so VideoFragment's loop-this-clip
+        // logic doesn't fire when we're handing playback off to the next
+        // video instead.
+        val currentPath = getCurrentMedium()?.path
+        if (org.fossify.gallery.helpers.PlaybackQueue.isActive && currentPath != null) {
+            val nextPath = org.fossify.gallery.helpers.PlaybackQueue.next(currentPath)
+            if (nextPath != null) {
+                val targetPos = mMediaFiles.indexOfFirst { it.path == nextPath }
+                if (targetPos >= 0) {
+                    binding.viewPager.setCurrentItem(targetPos, true)
+                    binding.viewPager.post {
+                        (getCurrentFragment() as? org.fossify.gallery.fragments.VideoFragment)
+                            ?.playVideo()
+                    }
+                    return true
+                }
+                // Next video isn't in this album's media list (e.g. the
+                // user opened the player on a single-file intent). Open
+                // it via a fresh intent so the activity reloads.
+                val intent = android.content.Intent(this, ViewPagerActivity::class.java).apply {
+                    putExtra(PATH, nextPath)
+                    putExtra(SKIP_AUTHENTICATION, true)
+                    putExtra(IS_FROM_GALLERY, true)
+                }
+                startActivity(intent)
+                return true
+            }
+            // End of queue.
+            org.fossify.gallery.helpers.PlaybackQueue.clear()
+            toast(R.string.playback_queue_finished)
+        }
+        return false
     }
 
     override fun isSlideShowActive() = mIsSlideshowActive

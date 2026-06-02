@@ -156,9 +156,14 @@ class PhotoFragment : ViewPagerFragment() {
         mOriginalPath = mMedium.path
 
         binding.apply {
-            subsamplingView.setOnClickListener { photoClicked() }
-            gesturesView.setOnClickListener { photoClicked() }
-            gifView.setOnClickListener { photoClicked() }
+            // photoClicked toggles chrome (AppBar / bottom actions). During
+            // Live Text the floating bar would be hidden behind chrome that
+            // re-appears, so suppress the toggle for tap-on-photo while
+            // Live Text is active. The overlay's tap detection handles word
+            // selection in that mode.
+            subsamplingView.setOnClickListener { if (!mLiveTextActive) photoClicked() }
+            gesturesView.setOnClickListener { if (!mLiveTextActive) photoClicked() }
+            gifView.setOnClickListener { if (!mLiveTextActive) photoClicked() }
             instantPrevItem.setOnClickListener { listener?.goToPrevItem() }
             instantNextItem.setOnClickListener { listener?.goToNextItem() }
             panoramaOutline.setOnClickListener { openPanorama() }
@@ -181,24 +186,36 @@ class PhotoFragment : ViewPagerFragment() {
             // install their own internal gesture detectors that swallow
             // MotionEvents before View.onTouchEvent's long-press timer runs,
             // so plain setOnLongClickListener never fires on them.
-            val longPressDetector = android.view.GestureDetector(
+            //
+            // The same detector also handles onSingleTapUp when Live Text is
+            // active so we can route per-word selection without taking
+            // ownership of the touch stream (which would kill pinch-zoom).
+            val photoTouchDetector = android.view.GestureDetector(
                 context,
                 object : android.view.GestureDetector.SimpleOnGestureListener() {
                     override fun onLongPress(e: android.view.MotionEvent) {
                         openLiveText()
                     }
+
+                    override fun onSingleTapUp(e: android.view.MotionEvent): Boolean {
+                        if (!mLiveTextActive) return false
+                        // Consume the click chain in this view so the
+                        // underlying setOnClickListener doesn't also fire
+                        // (it would no-op anyway, but this is tidier).
+                        return binding.liveTextOverlay.hitTestAndSelect(e.x, e.y)
+                    }
                 },
             )
 
             gifView.setOnTouchListener { _, event ->
-                longPressDetector.onTouchEvent(event)
+                photoTouchDetector.onTouchEvent(event)
                 if (context.config.allowDownGesture && gifViewFrame.controller.state.zoom == 1f) handleEvent(event)
                 false
             }
 
             setupGesturesViewStateListener()
             gesturesView.setOnTouchListener { _, event ->
-                longPressDetector.onTouchEvent(event)
+                photoTouchDetector.onTouchEvent(event)
                 val allowDownGesture = context.config.allowDownGesture
                 if (allowDownGesture && abs(mCurrentGestureViewZoom - mInitialZoom) < MAX_ZOOM_EQUALITY_TOLERANCE) {
                     handleEvent(event)
@@ -207,7 +224,7 @@ class PhotoFragment : ViewPagerFragment() {
             }
 
             subsamplingView.setOnTouchListener { _, event ->
-                longPressDetector.onTouchEvent(event)
+                photoTouchDetector.onTouchEvent(event)
                 if (subsamplingView.isZoomedOut() && context.config.allowDownGesture) handleEvent(event)
                 false
             }

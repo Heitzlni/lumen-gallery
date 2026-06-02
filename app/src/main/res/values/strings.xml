@@ -399,6 +399,12 @@
     <string name="live_text_copy">Copy selected text</string>
     <string name="live_text_no_text">No text in this photo.</string>
     <string name="live_text_unavailable">Live Text isn\'t available on this image.</string>
+    <string name="play_all_videos">Play / Shuffle videos</string>
+    <string name="playback_queue_play_in_order">Play in order</string>
+    <string name="playback_queue_shuffle">Shuffle</string>
+    <string name="playback_queue_no_videos">No videos in the current view.</string>
+    <string name="playback_queue_started">Playlist started — %1$d videos queued.</string>
+    <string name="playback_queue_finished">Playlist finished.</string>
     <plurals name="vault_restore_confirm">
         <item quantity="one">Restore %d item back to your gallery and remove it from the vault?</item>
         <item quantity="other">Restore %d items back to your gallery and remove them from the vault?</item>
