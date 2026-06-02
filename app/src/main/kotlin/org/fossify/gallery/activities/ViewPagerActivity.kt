@@ -232,6 +232,20 @@ class ViewPagerActivity : BaseViewerActivity(), ViewPager.OnPageChangeListener, 
             padBottomSystem = listOf(binding.bottomActions.bottomActionsWrapper),
         )
 
+        // PiP RemoteAction receiver. Has to be registered for the whole
+        // activity lifetime — onPause fires the moment the activity enters
+        // PiP, so registering in onResume / unregistering in onPause means
+        // the receiver is gone right when the PiP buttons need it.
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+            val filter = android.content.IntentFilter(PIP_ACTION)
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                registerReceiver(mPipActionReceiver, filter, RECEIVER_NOT_EXPORTED)
+            } else {
+                @Suppress("UnspecifiedRegisterReceiverFlag")
+                registerReceiver(mPipActionReceiver, filter)
+            }
+        }
+
         setupOptionsMenu()
         refreshMenuItems()
 
@@ -287,16 +301,6 @@ class ViewPagerActivity : BaseViewerActivity(), ViewPager.OnPageChangeListener, 
             return
         }
 
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-            val filter = android.content.IntentFilter(PIP_ACTION)
-            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
-                registerReceiver(mPipActionReceiver, filter, RECEIVER_NOT_EXPORTED)
-            } else {
-                @Suppress("UnspecifiedRegisterReceiverFlag")
-                registerReceiver(mPipActionReceiver, filter)
-            }
-        }
-
         initBottomActions()
         mOriginalBrightness = window.updateBrightness(config.maxBrightness, mOriginalBrightness)
         setupOrientation()
@@ -328,18 +332,19 @@ class ViewPagerActivity : BaseViewerActivity(), ViewPager.OnPageChangeListener, 
     override fun onPause() {
         super.onPause()
         stopSlideshow()
-        try {
-            unregisterReceiver(mPipActionReceiver)
-        } catch (_: Exception) {
-        }
     }
 
     // ---- PiP RemoteActions: prev / play-pause / next ---------------------
 
     private val mPipActionReceiver = object : android.content.BroadcastReceiver() {
         override fun onReceive(c: android.content.Context, intent: android.content.Intent) {
+            val what = intent.getStringExtra(PIP_EXTRA)
+            android.util.Log.d(
+                "ViewPagerActivity",
+                "PiP action received: $what (intent.action=${intent.action})"
+            )
             if (intent.action != PIP_ACTION) return
-            when (intent.getStringExtra(PIP_EXTRA)) {
+            when (what) {
                 PIP_TOGGLE -> {
                     (getCurrentFragment() as? org.fossify.gallery.fragments.VideoFragment)
                         ?.togglePlayPauseFromPip()
@@ -502,6 +507,10 @@ class ViewPagerActivity : BaseViewerActivity(), ViewPager.OnPageChangeListener, 
 
     override fun onDestroy() {
         super.onDestroy()
+        try {
+            unregisterReceiver(mPipActionReceiver)
+        } catch (_: Exception) {
+        }
         ColorModeHelper.resetColorMode(this)
 
         if (intent.extras?.containsKey(IS_VIEW_INTENT) == true) {
