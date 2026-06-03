@@ -677,19 +677,50 @@ class EditActivity : BaseCropActivity() {
         binding.editorDrawCanvas.updateTextSize(mTextSizePercent)
 
         binding.bottomEditorTextActions.bottomTextColorClickable.setOnClickListener {
-            ColorPickerDialog(this, mTextColor) { wasPositivePressed, color ->
+            // If a text is currently selected, the colour picker mutates it
+            // in place AND commits to undo history. Otherwise it just updates
+            // the "next text colour" used for newly-added annotations.
+            val selected = binding.editorDrawCanvas.selectedText()
+            val startColor = selected?.color ?: mTextColor
+            ColorPickerDialog(this, startColor) { wasPositivePressed, color ->
                 if (wasPositivePressed) {
-                    mTextColor = color
                     updateTextColorSwatch(color)
-                    binding.editorDrawCanvas.updateTextColor(color)
+                    if (selected != null) {
+                        binding.editorDrawCanvas.applyColorToSelected(color)
+                        binding.editorDrawCanvas.commitChange()
+                    } else {
+                        mTextColor = color
+                        binding.editorDrawCanvas.updateTextColor(color)
+                    }
                 }
             }
         }
 
-        binding.bottomEditorTextActions.bottomTextSize.onSeekBarChangeListener {
-            mTextSizePercent = it
-            binding.editorDrawCanvas.updateTextSize(it)
-        }
+        // Use the full SeekBar listener so we can snapshot history once per
+        // gesture (on ACTION_UP) rather than on every single onProgressChanged.
+        binding.bottomEditorTextActions.bottomTextSize.setOnSeekBarChangeListener(
+            object : android.widget.SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(
+                    seekBar: android.widget.SeekBar?, progress: Int, fromUser: Boolean
+                ) {
+                    if (!fromUser) return
+                    if (binding.editorDrawCanvas.selectedText() != null) {
+                        binding.editorDrawCanvas.applySizePercentToSelected(progress)
+                    } else {
+                        mTextSizePercent = progress
+                        binding.editorDrawCanvas.updateTextSize(progress)
+                    }
+                }
+
+                override fun onStartTrackingTouch(seekBar: android.widget.SeekBar?) {}
+
+                override fun onStopTrackingTouch(seekBar: android.widget.SeekBar?) {
+                    if (binding.editorDrawCanvas.selectedText() != null) {
+                        binding.editorDrawCanvas.commitChange()
+                    }
+                }
+            },
+        )
 
         binding.bottomEditorTextActions.bottomTextAdd.setOnClickListener {
             promptAddText()
@@ -697,6 +728,21 @@ class EditActivity : BaseCropActivity() {
 
         binding.bottomEditorTextActions.bottomTextUndo.setOnClickListener {
             binding.editorDrawCanvas.undo()
+        }
+
+        // When the user taps a text in the canvas, mirror its properties on
+        // the action bar so the sliders feel like they "track" the selected
+        // annotation. Tapping empty area deselects → we restore the
+        // "next text" values.
+        binding.editorDrawCanvas.onTextSelectionChanged = { selected ->
+            if (selected != null) {
+                updateTextColorSwatch(selected.color)
+                val percent = binding.editorDrawCanvas.percentFromSizePx(selected.sizePx)
+                binding.bottomEditorTextActions.bottomTextSize.progress = percent
+            } else {
+                updateTextColorSwatch(mTextColor)
+                binding.bottomEditorTextActions.bottomTextSize.progress = mTextSizePercent
+            }
         }
     }
 
