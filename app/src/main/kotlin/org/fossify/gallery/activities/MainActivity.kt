@@ -309,6 +309,18 @@ class MainActivity : SimpleActivity(), DirectoryOperationsListener {
             }, 1500L)
         }
 
+        // Auto-index pending photos in the background for the three search
+        // signals (ML Kit labels, OCR text, CLIP embeddings). Each indexer
+        // skips already-indexed paths, so this is "process whatever's new
+        // since the last app session" with no per-run cost beyond MediaStore
+        // enumeration. Delay a few seconds so we don't fight the initial
+        // gallery load — but only if we actually have media permission.
+        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+            if (hasPermission(getPermissionToRequest())) {
+                org.fossify.gallery.helpers.AutoIndexer.startIfEnabled(applicationContext)
+            }
+        }, 3000L)
+
         if (mStoredAnimateGifs != config.animateGifs) {
             getRecyclerAdapter()?.updateAnimateGifs(config.animateGifs)
         }
@@ -373,6 +385,9 @@ class MainActivity : SimpleActivity(), DirectoryOperationsListener {
 
     override fun onStop() {
         super.onStop()
+        // Pause background indexing while the app is in the background —
+        // resumes next onResume, picking up wherever it left off.
+        org.fossify.gallery.helpers.AutoIndexer.cancelAll()
 
         if (config.temporarilyShowHidden || config.tempSkipDeleteConfirmation || config.temporarilyShowExcluded) {
             mTempShowHiddenHandler.postDelayed({
