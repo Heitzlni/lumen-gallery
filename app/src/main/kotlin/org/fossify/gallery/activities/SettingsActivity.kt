@@ -67,6 +67,7 @@ class SettingsActivity : SimpleActivity() {
         setupClearTexts()
         setupIndexClip()
         setupClearClip()
+        setupAutoIndexToggles()
         setupManageHiddenFolders()
         setupSearchAllFiles()
         setupShowHiddenItems()
@@ -425,6 +426,44 @@ class SettingsActivity : SimpleActivity() {
                         refreshClipIndexStatus()
                     }
                 }
+            }
+        }
+    }
+
+    private fun setupAutoIndexToggles() {
+        binding.settingsAutoIndexLabels.isChecked = config.autoIndexLabels
+        binding.settingsAutoIndexLabelsHolder.setOnClickListener {
+            binding.settingsAutoIndexLabels.toggle()
+            config.autoIndexLabels = binding.settingsAutoIndexLabels.isChecked
+            // Apply immediately: kick off (or cancel) the indexer now so
+            // the user doesn't have to restart the app to see the toggle
+            // take effect.
+            if (config.autoIndexLabels) {
+                org.fossify.gallery.helpers.AutoIndexer.startIfEnabled(applicationContext)
+            } else {
+                org.fossify.gallery.helpers.ImageIndexer.cancel()
+            }
+        }
+
+        binding.settingsAutoIndexOcr.isChecked = config.autoIndexOcr
+        binding.settingsAutoIndexOcrHolder.setOnClickListener {
+            binding.settingsAutoIndexOcr.toggle()
+            config.autoIndexOcr = binding.settingsAutoIndexOcr.isChecked
+            if (config.autoIndexOcr) {
+                org.fossify.gallery.helpers.AutoIndexer.startIfEnabled(applicationContext)
+            } else {
+                org.fossify.gallery.helpers.TextIndexer.cancel()
+            }
+        }
+
+        binding.settingsAutoIndexClip.isChecked = config.autoIndexClip
+        binding.settingsAutoIndexClipHolder.setOnClickListener {
+            binding.settingsAutoIndexClip.toggle()
+            config.autoIndexClip = binding.settingsAutoIndexClip.isChecked
+            if (config.autoIndexClip) {
+                org.fossify.gallery.helpers.AutoIndexer.startIfEnabled(applicationContext)
+            } else {
+                org.fossify.gallery.helpers.EmbeddingIndexer.cancel()
             }
         }
     }

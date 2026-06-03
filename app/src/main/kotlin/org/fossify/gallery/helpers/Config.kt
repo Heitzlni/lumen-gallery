@@ -619,6 +619,18 @@ class Config(context: Context) : BaseConfig(context) {
         get() = prefs.getBoolean(PREFETCH_SCRUB_THUMBS, false)
         set(value) = prefs.edit().putBoolean(PREFETCH_SCRUB_THUMBS, value).apply()
 
+    var autoIndexLabels: Boolean
+        get() = prefs.getBoolean(AUTO_INDEX_LABELS, true)
+        set(value) = prefs.edit().putBoolean(AUTO_INDEX_LABELS, value).apply()
+
+    var autoIndexOcr: Boolean
+        get() = prefs.getBoolean(AUTO_INDEX_OCR, true)
+        set(value) = prefs.edit().putBoolean(AUTO_INDEX_OCR, value).apply()
+
+    var autoIndexClip: Boolean
+        get() = prefs.getBoolean(AUTO_INDEX_CLIP, true)
+        set(value) = prefs.edit().putBoolean(AUTO_INDEX_CLIP, value).apply()
+
     var hiddenFromAllFolders: MutableSet<String>
         get() = prefs.getStringSet(HIDDEN_FROM_ALL_FOLDERS, HashSet())!!
         set(value) = prefs.edit().remove(HIDDEN_FROM_ALL_FOLDERS).putStringSet(HIDDEN_FROM_ALL_FOLDERS, value).apply()
@@ -642,4 +654,7 @@ private const val VAULT_PROTECTION_HASH = "vault_protection_hash"
 private const val VAULT_PROTECTION_TYPE = "vault_protection_type"
 private const val ENABLE_PIP = "enable_picture_in_picture"
 private const val PREFETCH_SCRUB_THUMBS = "prefetch_scrub_thumbnails"
+private const val AUTO_INDEX_LABELS = "auto_index_labels"
+private const val AUTO_INDEX_OCR = "auto_index_ocr"
+private const val AUTO_INDEX_CLIP = "auto_index_clip"
 private const val HIDDEN_FROM_ALL_FOLDERS = "hidden_from_all_folders"

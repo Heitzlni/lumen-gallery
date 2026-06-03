@@ -389,6 +389,9 @@
     <string name="clip_search_clear">Clear smart search (CLIP) index</string>
     <string name="clip_search_clear_confirm">Delete all CLIP embeddings? You can rebuild afterwards.</string>
     <string name="clip_search_cleared">CLIP index cleared.</string>
+    <string name="auto_index_labels">Auto-index photo labels in the background</string>
+    <string name="auto_index_ocr">Auto-index text in photos (OCR) in the background</string>
+    <string name="auto_index_clip">Auto-build smart search (CLIP) index in the background</string>
     <string name="live_text_title">Text in this photo</string>
     <string name="live_text_scanning">Scanning…</string>
     <string name="live_text_none_found">No text detected.</string>
