@@ -199,10 +199,20 @@ class PhotoFragment : ViewPagerFragment() {
 
                     override fun onSingleTapUp(e: android.view.MotionEvent): Boolean {
                         if (!mLiveTextActive) return false
-                        // Consume the click chain in this view so the
-                        // underlying setOnClickListener doesn't also fire
-                        // (it would no-op anyway, but this is tidier).
                         return binding.liveTextOverlay.hitTestAndSelect(e.x, e.y)
+                    }
+
+                    // When two taps land within the system double-tap window,
+                    // GestureDetector fires THIS callback for the second tap's
+                    // UP — not onSingleTapUp. Without forwarding it to the
+                    // overlay, every other tap was silently dropped, which is
+                    // why "tap-tap to grow to line" felt broken.
+                    override fun onDoubleTapEvent(e: android.view.MotionEvent): Boolean {
+                        if (!mLiveTextActive) return false
+                        if (e.actionMasked == android.view.MotionEvent.ACTION_UP) {
+                            return binding.liveTextOverlay.hitTestAndSelect(e.x, e.y)
+                        }
+                        return false
                     }
                 },
             )
@@ -223,8 +233,28 @@ class PhotoFragment : ViewPagerFragment() {
                 false
             }
 
+            val doubleTapTimeout = android.view.ViewConfiguration.getDoubleTapTimeout()
             subsamplingView.setOnTouchListener { _, event ->
                 photoTouchDetector.onTouchEvent(event)
+
+                // SSIV has no public "disable double-tap" API. Consume the
+                // second ACTION_DOWN of a fast tap pair so SSIV's internal
+                // double-tap-zoom never sees it.
+                if (mLiveTextActive) {
+                    val now = android.os.SystemClock.uptimeMillis()
+                    val action = event.actionMasked
+                    if (action == android.view.MotionEvent.ACTION_DOWN &&
+                        mLiveTextSubLastUpTime != 0L &&
+                        (now - mLiveTextSubLastUpTime) < doubleTapTimeout
+                    ) {
+                        mLiveTextSubLastUpTime = 0L
+                        return@setOnTouchListener true
+                    }
+                    if (action == android.view.MotionEvent.ACTION_UP) {
+                        mLiveTextSubLastUpTime = now
+                    }
+                }
+
                 if (subsamplingView.isZoomedOut() && context.config.allowDownGesture) handleEvent(event)
                 false
             }
@@ -985,8 +1015,13 @@ class PhotoFragment : ViewPagerFragment() {
 
     private var mLiveTextActive = false
     private var mLiveTextForcedFullscreen = false
-    private var mLiveTextSavedGesDoubleTapZoom: Float? = null
+    private var mLiveTextSavedSwallowDoubleTaps: Boolean? = null
     private var mLiveTextSavedSubDoubleTapScale: Float? = null
+    // Timestamp of the most recent ACTION_UP on the subsampling view so the
+    // touch listener can detect a "second tap DOWN within the system
+    // double-tap window" and consume it, preventing SSIV's built-in
+    // double-tap-zoom from firing while Live Text is active.
+    private var mLiveTextSubLastUpTime = 0L
 
     /** Apple-style Live Text. Long-press → run OCR with bounding boxes,
      *  overlay highlight rects on each detected word at the photo's
@@ -1078,24 +1113,31 @@ class PhotoFragment : ViewPagerFragment() {
         binding.liveTextBar.beVisible()
         binding.liveTextCopy.isEnabled = false
 
-        // Neutralize double-tap-zoom on whichever image view is mounted
-        // so the user's 2nd / 3rd tap of progressive line/block selection
-        // isn't interpreted as a zoom gesture by the underlying view's
-        // own gesture detector. Pinch (two-finger) still works.
-        // Neither library exposes a clean "disable double-tap" setter —
-        // both use a zoom-scale float, so setting it to 1.0 makes the
-        // double-tap a visual no-op.
+        // Truly disable double-tap-zoom on the underlying image view so
+        // the 2nd / 3rd tap of progressive line/block selection isn't
+        // interpreted as a zoom gesture. Two-finger pinch is separate
+        // (isZoomEnabled) and stays on.
+        //
+        // gesture-views exposes setSwallowDoubleTaps which makes the lib
+        // ignore the gesture entirely — works at any zoom level.
+        //
+        // SubsamplingScaleImageView only exposes a target scale (no
+        // "disable"). Setting that to 1.0f handles the zoom-1× case but
+        // animates from current scale to 1× when zoomed in, which is
+        // exactly the bug the user hit. So we ALSO intercept the second
+        // ACTION_DOWN of a double-tap in SSIV's touch listener below.
         val ges = binding.gesturesView
         if (ges.isVisible()) {
             val s = ges.controller.settings
-            mLiveTextSavedGesDoubleTapZoom = s.doubleTapZoom
-            s.doubleTapZoom = 1.0f
+            mLiveTextSavedSwallowDoubleTaps = s.swallowDoubleTaps
+            s.swallowDoubleTaps = true
         }
         val sub = binding.subsamplingView
         if (sub.isVisible() && mIsSubsamplingVisible) {
             mLiveTextSavedSubDoubleTapScale = sub.doubleTapZoomScale
             sub.doubleTapZoomScale = 1.0f
         }
+        mLiveTextSubLastUpTime = 0L
 
         binding.liveTextOverlay.onSelectionChanged = { count ->
             binding.liveTextCopy.isEnabled = count > 0
@@ -1124,14 +1166,15 @@ class PhotoFragment : ViewPagerFragment() {
         binding.liveTextOverlay.beGone()
         binding.liveTextBar.beGone()
 
-        mLiveTextSavedGesDoubleTapZoom?.let { saved ->
-            binding.gesturesView.controller.settings.doubleTapZoom = saved
+        mLiveTextSavedSwallowDoubleTaps?.let { saved ->
+            binding.gesturesView.controller.settings.swallowDoubleTaps = saved
         }
-        mLiveTextSavedGesDoubleTapZoom = null
+        mLiveTextSavedSwallowDoubleTaps = null
         mLiveTextSavedSubDoubleTapScale?.let { saved ->
             binding.subsamplingView.doubleTapZoomScale = saved
         }
         mLiveTextSavedSubDoubleTapScale = null
+        mLiveTextSubLastUpTime = 0L
 
         if (mLiveTextForcedFullscreen && mIsFullscreen) {
             mLiveTextForcedFullscreen = false

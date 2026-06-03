@@ -1099,17 +1099,28 @@ class MediaActivity : SimpleActivity(), MediaOperationsListener {
             .filterIsInstance<Medium>()
             .filter { it.isVideo() }
             .map { it.path }
-        if (videos.isEmpty()) {
+        val queueActive = org.fossify.gallery.helpers.PlaybackQueue.isActive
+        if (videos.isEmpty() && !queueActive) {
             toast(R.string.playback_queue_no_videos)
             return
         }
-        val items = arrayListOf(
-            org.fossify.commons.models.RadioItem(0, getString(R.string.playback_queue_play_in_order)),
-            org.fossify.commons.models.RadioItem(1, getString(R.string.playback_queue_shuffle)),
-        )
+        val items = arrayListOf<org.fossify.commons.models.RadioItem>()
+        if (videos.isNotEmpty()) {
+            items.add(org.fossify.commons.models.RadioItem(0, getString(R.string.playback_queue_play_in_order)))
+            items.add(org.fossify.commons.models.RadioItem(1, getString(R.string.playback_queue_shuffle)))
+        }
+        if (queueActive) {
+            items.add(org.fossify.commons.models.RadioItem(2, getString(R.string.playback_queue_stop)))
+        }
         org.fossify.commons.dialogs.RadioGroupDialog(this, items) { result ->
-            val shuffle = (result as Int) == 1
-            startPlaylist(videos, shuffle)
+            when (result as Int) {
+                0 -> startPlaylist(videos, shuffle = false)
+                1 -> startPlaylist(videos, shuffle = true)
+                2 -> {
+                    org.fossify.gallery.helpers.PlaybackQueue.clear()
+                    toast(R.string.playback_queue_cleared)
+                }
+            }
         }
     }
 

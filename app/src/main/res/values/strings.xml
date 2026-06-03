@@ -405,6 +405,8 @@
     <string name="playback_queue_no_videos">No videos in the current view.</string>
     <string name="playback_queue_started">Playlist started — %1$d videos queued.</string>
     <string name="playback_queue_finished">Playlist finished.</string>
+    <string name="playback_queue_stop">Stop current playlist</string>
+    <string name="playback_queue_cleared">Playlist stopped.</string>
     <plurals name="vault_restore_confirm">
         <item quantity="one">Restore %d item back to your gallery and remove it from the vault?</item>
         <item quantity="other">Restore %d items back to your gallery and remove them from the vault?</item>
