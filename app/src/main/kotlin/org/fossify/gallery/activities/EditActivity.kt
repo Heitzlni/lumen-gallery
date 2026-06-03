@@ -100,6 +100,7 @@ class EditActivity : BaseCropActivity() {
         private const val PRIMARY_ACTION_FILTER = 1
         private const val PRIMARY_ACTION_CROP_ROTATE = 2
         private const val PRIMARY_ACTION_DRAW = 3
+        private const val PRIMARY_ACTION_TEXT = 4
 
         private const val CROP_ROTATE_NONE = 0
         private const val CROP_ROTATE_ASPECT_RATIO = 1
@@ -505,6 +506,7 @@ class EditActivity : BaseCropActivity() {
         setupCropRotateActionButtons()
         setupAspectRatioButtons()
         setupDrawButtons()
+        setupTextButtons()
     }
 
     private fun setupPrimaryActionButtons() {
@@ -519,10 +521,15 @@ class EditActivity : BaseCropActivity() {
         binding.bottomEditorPrimaryActions.bottomPrimaryDraw.setOnClickListener {
             bottomDrawClicked()
         }
+
+        binding.bottomEditorPrimaryActions.bottomPrimaryText.setOnClickListener {
+            bottomTextClicked()
+        }
         arrayOf(
             binding.bottomEditorPrimaryActions.bottomPrimaryFilter,
             binding.bottomEditorPrimaryActions.bottomPrimaryCropRotate,
-            binding.bottomEditorPrimaryActions.bottomPrimaryDraw
+            binding.bottomEditorPrimaryActions.bottomPrimaryDraw,
+            binding.bottomEditorPrimaryActions.bottomPrimaryText
         ).forEach {
             it.showContentDescriptionOnLongClick()
         }
@@ -551,6 +558,15 @@ class EditActivity : BaseCropActivity() {
             PRIMARY_ACTION_NONE
         } else {
             PRIMARY_ACTION_DRAW
+        }
+        updatePrimaryActionButtons()
+    }
+
+    private fun bottomTextClicked() {
+        currPrimaryAction = if (currPrimaryAction == PRIMARY_ACTION_TEXT) {
+            PRIMARY_ACTION_NONE
+        } else {
+            PRIMARY_ACTION_TEXT
         }
         updatePrimaryActionButtons()
     }
@@ -649,6 +665,74 @@ class EditActivity : BaseCropActivity() {
         }
     }
 
+    private var mTextColor: Int = 0
+    private var mTextSizePercent: Int = 50
+
+    private fun setupTextButtons() {
+        mTextColor = config.lastEditorDrawColor
+        updateTextColorSwatch(mTextColor)
+        binding.editorDrawCanvas.updateTextColor(mTextColor)
+
+        binding.bottomEditorTextActions.bottomTextSize.progress = mTextSizePercent
+        binding.editorDrawCanvas.updateTextSize(mTextSizePercent)
+
+        binding.bottomEditorTextActions.bottomTextColorClickable.setOnClickListener {
+            ColorPickerDialog(this, mTextColor) { wasPositivePressed, color ->
+                if (wasPositivePressed) {
+                    mTextColor = color
+                    updateTextColorSwatch(color)
+                    binding.editorDrawCanvas.updateTextColor(color)
+                }
+            }
+        }
+
+        binding.bottomEditorTextActions.bottomTextSize.onSeekBarChangeListener {
+            mTextSizePercent = it
+            binding.editorDrawCanvas.updateTextSize(it)
+        }
+
+        binding.bottomEditorTextActions.bottomTextAdd.setOnClickListener {
+            promptAddText()
+        }
+
+        binding.bottomEditorTextActions.bottomTextUndo.setOnClickListener {
+            binding.editorDrawCanvas.undo()
+        }
+    }
+
+    private fun updateTextColorSwatch(color: Int) {
+        val drawable = resources.getDrawable(R.drawable.circle_background, theme).mutate()
+        (drawable as? android.graphics.drawable.GradientDrawable)?.setColor(color)
+            ?: drawable.setTint(color)
+        binding.bottomEditorTextActions.bottomTextColor.background = drawable
+    }
+
+    private fun promptAddText() {
+        val input = com.google.android.material.textfield.TextInputEditText(this).apply {
+            hint = getString(R.string.edit_text_input_hint)
+            setSingleLine(false)
+            maxLines = 4
+        }
+        val container = android.widget.FrameLayout(this).apply {
+            val pad = resources.getDimensionPixelSize(org.fossify.commons.R.dimen.activity_margin)
+            setPadding(pad, pad / 2, pad, 0)
+            addView(input)
+        }
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle(R.string.edit_text)
+            .setView(container)
+            .setPositiveButton(org.fossify.commons.R.string.ok) { _, _ ->
+                val text = input.text?.toString()?.trim().orEmpty()
+                if (text.isEmpty()) {
+                    toast(R.string.edit_text_empty)
+                } else {
+                    binding.editorDrawCanvas.addText(text)
+                }
+            }
+            .setNegativeButton(org.fossify.commons.R.string.cancel, null)
+            .show()
+    }
+
     private fun updateBrushSize(percent: Int) {
         binding.editorDrawCanvas.updateBrushSize(percent)
         val scale = max(0.03f, percent / 100f)
@@ -661,14 +745,27 @@ class EditActivity : BaseCropActivity() {
             loadCropImageView()
         } else if (binding.defaultImageView.isGone() && currPrimaryAction == PRIMARY_ACTION_FILTER) {
             loadDefaultImageView()
-        } else if (binding.editorDrawCanvas.isGone() && currPrimaryAction == PRIMARY_ACTION_DRAW) {
+        } else if (binding.editorDrawCanvas.isGone() &&
+            (currPrimaryAction == PRIMARY_ACTION_DRAW || currPrimaryAction == PRIMARY_ACTION_TEXT)
+        ) {
             loadDrawCanvas()
         }
+
+        // Tell the canvas which input mode to use — text mode swaps draw
+        // strokes for "drag the nearest text annotation".
+        binding.editorDrawCanvas.setMode(
+            if (currPrimaryAction == PRIMARY_ACTION_TEXT) {
+                org.fossify.gallery.views.EditorDrawCanvas.Mode.TEXT
+            } else {
+                org.fossify.gallery.views.EditorDrawCanvas.Mode.DRAW
+            }
+        )
 
         arrayOf(
             binding.bottomEditorPrimaryActions.bottomPrimaryFilter,
             binding.bottomEditorPrimaryActions.bottomPrimaryCropRotate,
-            binding.bottomEditorPrimaryActions.bottomPrimaryDraw
+            binding.bottomEditorPrimaryActions.bottomPrimaryDraw,
+            binding.bottomEditorPrimaryActions.bottomPrimaryText
         ).forEach {
             it.applyColorFilter(Color.WHITE)
         }
@@ -677,6 +774,7 @@ class EditActivity : BaseCropActivity() {
             PRIMARY_ACTION_FILTER -> binding.bottomEditorPrimaryActions.bottomPrimaryFilter
             PRIMARY_ACTION_CROP_ROTATE -> binding.bottomEditorPrimaryActions.bottomPrimaryCropRotate
             PRIMARY_ACTION_DRAW -> binding.bottomEditorPrimaryActions.bottomPrimaryDraw
+            PRIMARY_ACTION_TEXT -> binding.bottomEditorPrimaryActions.bottomPrimaryText
             else -> null
         }
 
@@ -684,6 +782,7 @@ class EditActivity : BaseCropActivity() {
         binding.bottomEditorFilterActions.root.beVisibleIf(currPrimaryAction == PRIMARY_ACTION_FILTER)
         binding.bottomEditorCropRotateActions.root.beVisibleIf(currPrimaryAction == PRIMARY_ACTION_CROP_ROTATE)
         binding.bottomEditorDrawActions.root.beVisibleIf(currPrimaryAction == PRIMARY_ACTION_DRAW)
+        binding.bottomEditorTextActions.root.beVisibleIf(currPrimaryAction == PRIMARY_ACTION_TEXT)
 
         if (currPrimaryAction == PRIMARY_ACTION_FILTER && binding.bottomEditorFilterActions.bottomActionsFilterList.adapter == null) {
             ensureBackgroundThread {

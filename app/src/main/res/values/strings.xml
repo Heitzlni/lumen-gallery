@@ -392,6 +392,10 @@
     <string name="auto_index_labels">Auto-index photo labels in the background</string>
     <string name="auto_index_ocr">Auto-index text in photos (OCR) in the background</string>
     <string name="auto_index_clip">Auto-build smart search (CLIP) index in the background</string>
+    <string name="edit_text">Add text</string>
+    <string name="edit_text_add">Add text to image</string>
+    <string name="edit_text_input_hint">Type text to place on photo…</string>
+    <string name="edit_text_empty">Type something first.</string>
     <string name="live_text_title">Text in this photo</string>
     <string name="live_text_scanning">Scanning…</string>
     <string name="live_text_none_found">No text detected.</string>
