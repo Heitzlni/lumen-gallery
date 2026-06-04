@@ -443,6 +443,21 @@
             </RelativeLayout>
 
             <RelativeLayout
+                android:id="@+id/settings_memories_test_holder"
+                style="@style/SettingsHolderTextViewOneLinerStyle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content">
+
+                <org.fossify.commons.views.MyTextView
+                    android:id="@+id/settings_memories_test"
+                    style="@style/SettingsTextLabelStyle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/memories_show_any" />
+
+            </RelativeLayout>
+
+            <RelativeLayout
                 android:id="@+id/settings_gp_migrate_holder"
                 style="@style/SettingsHolderTextViewOneLinerStyle"
                 android:layout_width="match_parent"

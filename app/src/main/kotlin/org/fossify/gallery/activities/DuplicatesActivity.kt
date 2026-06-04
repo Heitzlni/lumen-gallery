@@ -1,6 +1,5 @@
 package org.fossify.gallery.activities
 
-import android.content.Intent
 import android.os.Bundle
 import org.fossify.commons.dialogs.ConfirmationDialog
 import org.fossify.commons.extensions.beGone
@@ -19,8 +18,6 @@ import org.fossify.gallery.extensions.imageHashDB
 import org.fossify.gallery.extensions.tryDeleteFileDirItem
 import org.fossify.gallery.helpers.DupeFinder
 import org.fossify.gallery.helpers.HashIndexer
-import org.fossify.gallery.helpers.PATH
-import org.fossify.gallery.helpers.SKIP_AUTHENTICATION
 import java.io.File
 
 /**
@@ -163,11 +160,26 @@ class DuplicatesActivity : SimpleActivity() {
         }
     }
 
+    /**
+     * Open the photo as a simple full-screen dialog with Glide. We deliberately
+     * avoid ViewPagerActivity here — it relies on MediaActivity.mMedia for its
+     * media list, so opening an out-of-list duplicate path resolved to position
+     * 0 and showed the wrong photo. A tap-to-dismiss dialog is more honest
+     * for a "let me see this duplicate up close" use case.
+     */
     private fun openInViewer(path: String) {
-        Intent(this, ViewPagerActivity::class.java).apply {
-            putExtra(PATH, path)
-            putExtra(SKIP_AUTHENTICATION, true)
-            startActivity(this)
+        val dialog = android.app.Dialog(
+            this, android.R.style.Theme_Black_NoTitleBar_Fullscreen
+        )
+        val iv = android.widget.ImageView(this).apply {
+            scaleType = android.widget.ImageView.ScaleType.FIT_CENTER
+            setBackgroundColor(android.graphics.Color.BLACK)
+            setOnClickListener { dialog.dismiss() }
         }
+        com.bumptech.glide.Glide.with(this)
+            .load(path)
+            .into(iv)
+        dialog.setContentView(iv)
+        dialog.show()
     }
 }

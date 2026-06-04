@@ -19,6 +19,85 @@ object RecentlyAddedMover {
 
     data class Match(val path: String, val name: String, val mime: String, val sizeBytes: Long)
 
+    /** Snapshot every photo/video path currently visible in MediaStore.
+     *  Used by the Google Photos migration helper — the user takes this
+     *  snapshot BEFORE moving photos out of GP Locked Folder, then we diff
+     *  against the live MediaStore later to find what just appeared. */
+    fun snapshotAllPaths(context: Context): Set<String> {
+        val out = HashSet<String>()
+        val projection = arrayOf(MediaStore.Files.FileColumns.DATA)
+        val selection =
+            "${MediaStore.Files.FileColumns.MEDIA_TYPE}=? OR " +
+                "${MediaStore.Files.FileColumns.MEDIA_TYPE}=?"
+        val args = arrayOf(
+            MediaStore.Files.FileColumns.MEDIA_TYPE_IMAGE.toString(),
+            MediaStore.Files.FileColumns.MEDIA_TYPE_VIDEO.toString(),
+        )
+        try {
+            context.contentResolver.query(
+                MediaStore.Files.getContentUri("external"),
+                projection, selection, args, null,
+            )?.use { c ->
+                val dataIdx = c.getColumnIndexOrThrow(MediaStore.Files.FileColumns.DATA)
+                while (c.moveToNext()) {
+                    val p = c.getString(dataIdx) ?: continue
+                    if (p.isNotEmpty()) out.add(p)
+                }
+            }
+        } catch (_: Exception) {
+        }
+        return out
+    }
+
+    /** Return every photo/video currently visible that wasn't in [snapshot].
+     *  This is the reliable way to catch GP-restored photos because GP
+     *  preserves the original DATE_ADDED / file mtime on restore, so a
+     *  recency filter misses them. */
+    fun findNewSince(context: Context, snapshot: Set<String>): List<Match> {
+        val out = ArrayList<Match>()
+        val projection = arrayOf(
+            MediaStore.Files.FileColumns.DATA,
+            MediaStore.Files.FileColumns.DISPLAY_NAME,
+            MediaStore.Files.FileColumns.MIME_TYPE,
+            MediaStore.Files.FileColumns.SIZE,
+            MediaStore.Files.FileColumns.MEDIA_TYPE,
+        )
+        val selection =
+            "${MediaStore.Files.FileColumns.MEDIA_TYPE}=? OR " +
+                "${MediaStore.Files.FileColumns.MEDIA_TYPE}=?"
+        val args = arrayOf(
+            MediaStore.Files.FileColumns.MEDIA_TYPE_IMAGE.toString(),
+            MediaStore.Files.FileColumns.MEDIA_TYPE_VIDEO.toString(),
+        )
+        try {
+            context.contentResolver.query(
+                MediaStore.Files.getContentUri("external"),
+                projection, selection, args, null,
+            )?.use { c ->
+                val dataIdx = c.getColumnIndexOrThrow(MediaStore.Files.FileColumns.DATA)
+                val nameIdx = c.getColumnIndexOrThrow(MediaStore.Files.FileColumns.DISPLAY_NAME)
+                val mimeIdx = c.getColumnIndexOrThrow(MediaStore.Files.FileColumns.MIME_TYPE)
+                val sizeIdx = c.getColumnIndexOrThrow(MediaStore.Files.FileColumns.SIZE)
+                while (c.moveToNext()) {
+                    val path = c.getString(dataIdx) ?: continue
+                    if (path.isEmpty()) continue
+                    if (path in snapshot) continue
+                    if (!File(path).exists()) continue
+                    out.add(
+                        Match(
+                            path = path,
+                            name = c.getString(nameIdx) ?: File(path).name,
+                            mime = c.getString(mimeIdx) ?: "application/octet-stream",
+                            sizeBytes = c.getLong(sizeIdx),
+                        )
+                    )
+                }
+            }
+        } catch (_: Exception) {
+        }
+        return out
+    }
+
     fun findRecent(context: Context, withinMinutes: Int): List<Match> {
         val cutoff = (System.currentTimeMillis() / 1000) - (withinMinutes * 60L)
         val out = ArrayList<Match>()

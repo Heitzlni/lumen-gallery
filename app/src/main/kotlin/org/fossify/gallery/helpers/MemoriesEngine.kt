@@ -19,9 +19,9 @@ import kotlin.math.sqrt
  */
 object MemoriesEngine {
 
-    private const val MIN_CLUSTER_PHOTOS = 3
-    private const val CLUSTER_SIMILARITY_THRESHOLD = 0.55f
-    private const val MAX_YEARS_BACK = 8
+    private const val MIN_CLUSTER_PHOTOS = 2
+    private const val CLUSTER_SIMILARITY_THRESHOLD = 0.45f
+    private const val MAX_YEARS_BACK = 12
     private const val MAX_MEMORY_PHOTOS = 30
 
     data class Memory(
@@ -243,5 +243,90 @@ object MemoriesEngine {
             }
         }
         return best.replaceFirstChar { it.uppercaseChar() }
+    }
+
+    /**
+     * Fallback used by the Settings "Show any memory" button — finds the
+     * best coherent cluster from ANY past month and day, not just today.
+     * Useful for verifying the feature works without waiting for the
+     * calendar to land on a day with past-year photos.
+     */
+    fun computeAnyMemory(context: Context): Memory? {
+        val rows = try {
+            context.imageEmbeddingDB.allForSearch()
+        } catch (_: Exception) {
+            return null
+        }
+        if (rows.size < MIN_CLUSTER_PHOTOS) return null
+
+        // Bucket every CLIP-indexed photo by (year, month, day) from file mtime,
+        // then look for the largest coherent cluster across all buckets that
+        // are at least 30 days old (so it actually feels like a memory).
+        val cal = Calendar.getInstance()
+        val now = System.currentTimeMillis()
+        val thirtyDaysAgo = now - 30L * 24 * 60 * 60 * 1000
+        val byDay = HashMap<String, MutableList<PhotoVec>>()
+        for (row in rows) {
+            val file = File(row.mediaPath)
+            if (!file.exists()) continue
+            val t = file.lastModified()
+            if (t > thirtyDaysAgo) continue
+            cal.timeInMillis = t
+            val key = "%04d-%02d-%02d".format(
+                cal.get(Calendar.YEAR),
+                cal.get(Calendar.MONTH) + 1,
+                cal.get(Calendar.DAY_OF_MONTH),
+            )
+            val vec = readFloatBlob(row.vec) ?: continue
+            byDay.getOrPut(key) { ArrayList() }
+                .add(PhotoVec(row.mediaPath, vec, cal.get(Calendar.YEAR)))
+        }
+        if (byDay.isEmpty()) return null
+
+        val nowYear = Calendar.getInstance().get(Calendar.YEAR)
+        var bestMemory: Memory? = null
+        var bestScore = 0
+        for ((_, photos) in byDay) {
+            if (photos.size < MIN_CLUSTER_PHOTOS) continue
+            val cluster = pickLargestCluster(photos) ?: continue
+            if (cluster.size < MIN_CLUSTER_PHOTOS) continue
+            if (cluster.size > bestScore) {
+                bestScore = cluster.size
+                val yearsAgo = (nowYear - cluster.first().year).coerceAtLeast(0)
+                val label = inferActivityLabel(context, meanVec(cluster.map { it.vec }))
+                bestMemory = Memory(
+                    photos = cluster.take(MAX_MEMORY_PHOTOS).map { it.path },
+                    yearsAgo = yearsAgo,
+                    activityLabel = label,
+                )
+            }
+        }
+        return bestMemory
+    }
+
+    fun diagnostics(context: Context): String {
+        val rows = try {
+            context.imageEmbeddingDB.allForSearch()
+        } catch (_: Exception) {
+            return "Embedding DB unavailable."
+        }
+        val cal = Calendar.getInstance()
+        val today = cal.get(Calendar.MONTH) to cal.get(Calendar.DAY_OF_MONTH)
+        val tmp = Calendar.getInstance()
+        var liveCount = 0
+        var todayMatches = 0
+        for (row in rows) {
+            val f = File(row.mediaPath)
+            if (!f.exists()) continue
+            liveCount++
+            tmp.timeInMillis = f.lastModified()
+            if (tmp.get(Calendar.MONTH) == today.first &&
+                tmp.get(Calendar.DAY_OF_MONTH) == today.second
+            ) todayMatches++
+        }
+        return "CLIP-indexed photos: ${rows.size}\n" +
+            "Files still present: $liveCount\n" +
+            "Photos taken on today's month/day from past years: $todayMatches\n" +
+            "Memory threshold: ≥$MIN_CLUSTER_PHOTOS coherent photos within ${MAX_YEARS_BACK}y."
     }
 }

@@ -663,6 +663,13 @@ class Config(context: Context) : BaseConfig(context) {
         get() = prefs.getString(MEMORIES_SOUNDTRACK, "")!!
         set(value) = prefs.edit().putString(MEMORIES_SOUNDTRACK, value).apply()
 
+    /** Newline-separated snapshot of every visible media path, taken right
+     *  before the user starts the Google Photos Locked Folder migration.
+     *  The "find new photos" step diffs the live MediaStore against this. */
+    var gpMigrationSnapshot: String
+        get() = prefs.getString(GP_MIGRATION_SNAPSHOT, "")!!
+        set(value) = prefs.edit().putString(GP_MIGRATION_SNAPSHOT, value).apply()
+
     var hiddenFromAllFolders: MutableSet<String>
         get() = prefs.getStringSet(HIDDEN_FROM_ALL_FOLDERS, HashSet())!!
         set(value) = prefs.edit().remove(HIDDEN_FROM_ALL_FOLDERS).putStringSet(HIDDEN_FROM_ALL_FOLDERS, value).apply()
@@ -697,4 +704,5 @@ private const val MEMORIES_CACHED_LABEL = "memories_cached_label"
 private const val MEMORIES_CACHED_YEARS_AGO = "memories_cached_years_ago"
 private const val MEMORIES_CACHED_DISMISSED = "memories_cached_dismissed"
 private const val MEMORIES_SOUNDTRACK = "memories_soundtrack"
+private const val GP_MIGRATION_SNAPSHOT = "gp_migration_snapshot"
 private const val HIDDEN_FROM_ALL_FOLDERS = "hidden_from_all_folders"
