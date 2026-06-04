@@ -178,6 +178,7 @@ class EditActivity : BaseCropActivity() {
                 R.id.overwrite_original -> startSaveFlow(overwrite = true)
                 R.id.edit -> editWith()
                 R.id.share -> shareImage()
+                R.id.editor_clear_all -> confirmClearAllAnnotations()
                 else -> return@setOnMenuItemClickListener false
             }
             return@setOnMenuItemClickListener true
@@ -663,6 +664,114 @@ class EditActivity : BaseCropActivity() {
         binding.bottomEditorDrawActions.bottomDrawUndo.setOnClickListener {
             binding.editorDrawCanvas.undo()
         }
+        binding.bottomEditorDrawActions.bottomDrawRedo.setOnClickListener {
+            binding.editorDrawCanvas.redo()
+        }
+        binding.bottomEditorDrawActions.bottomDrawLasso.setOnClickListener {
+            toggleLassoMode()
+        }
+
+        binding.editorDrawCanvas.onStrokeLongPress = { stroke ->
+            showEditStrokeDialog(stroke)
+        }
+        binding.editorDrawCanvas.onStrokeSelectionChanged = { count ->
+            if (count > 0) {
+                toast(getString(R.string.editor_strokes_selected, count))
+            }
+        }
+    }
+
+    private fun toggleLassoMode() {
+        val canvas = binding.editorDrawCanvas
+        val next = if (canvas.currentMode() == org.fossify.gallery.views.EditorDrawCanvas.Mode.LASSO) {
+            org.fossify.gallery.views.EditorDrawCanvas.Mode.DRAW
+        } else {
+            org.fossify.gallery.views.EditorDrawCanvas.Mode.LASSO
+        }
+        canvas.setMode(next)
+        val on = next == org.fossify.gallery.views.EditorDrawCanvas.Mode.LASSO
+        binding.bottomEditorDrawActions.bottomDrawLasso.setColorFilter(
+            if (on) getProperPrimaryColor() else Color.WHITE
+        )
+        toast(if (on) R.string.editor_lasso_on else R.string.editor_lasso_off)
+    }
+
+    private fun showEditStrokeDialog(stroke: org.fossify.gallery.views.EditorDrawCanvas.Action.Stroke) {
+        val items = arrayOf(
+            getString(R.string.editor_change_color),
+            getString(R.string.editor_change_size),
+            getString(org.fossify.commons.R.string.delete),
+        )
+        val applyToSelection = binding.editorDrawCanvas.hasStrokeSelection() &&
+            // If the user long-pressed inside a multi-selection, treat the
+            // dialog as applying to the whole selection. Otherwise it's
+            // about just this one stroke.
+            true
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle(R.string.editor_edit_stroke)
+            .setItems(items) { _, which ->
+                when (which) {
+                    0 -> {
+                        ColorPickerDialog(this, stroke.paint.color) { ok, color ->
+                            if (ok) {
+                                if (applyToSelection) {
+                                    binding.editorDrawCanvas.recolorSelectedStrokes(color)
+                                } else {
+                                    binding.editorDrawCanvas.recolorStroke(stroke, color)
+                                }
+                            }
+                        }
+                    }
+                    1 -> {
+                        val initial = binding.editorDrawCanvas.strokePercentFromWidth(stroke.paint.strokeWidth)
+                        showStrokeSizeDialog(initial) { percent ->
+                            if (applyToSelection) {
+                                binding.editorDrawCanvas.resizeSelectedStrokes(percent)
+                            } else {
+                                binding.editorDrawCanvas.resizeStroke(stroke, percent)
+                            }
+                        }
+                    }
+                    2 -> {
+                        if (applyToSelection) {
+                            binding.editorDrawCanvas.deleteSelectedStrokes()
+                        } else {
+                            binding.editorDrawCanvas.deleteStroke(stroke)
+                        }
+                    }
+                }
+            }
+            .setNegativeButton(org.fossify.commons.R.string.cancel, null)
+            .show()
+    }
+
+    private fun showStrokeSizeDialog(initialPercent: Int, onConfirm: (Int) -> Unit) {
+        val seekBar = android.widget.SeekBar(this).apply {
+            max = 100
+            progress = initialPercent
+        }
+        val container = android.widget.FrameLayout(this).apply {
+            val pad = resources.getDimensionPixelSize(org.fossify.commons.R.dimen.activity_margin)
+            setPadding(pad, pad, pad, 0)
+            addView(seekBar)
+        }
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle(R.string.editor_change_size)
+            .setView(container)
+            .setPositiveButton(org.fossify.commons.R.string.ok) { _, _ ->
+                onConfirm(seekBar.progress)
+            }
+            .setNegativeButton(org.fossify.commons.R.string.cancel, null)
+            .show()
+    }
+
+    private fun confirmClearAllAnnotations() {
+        org.fossify.commons.dialogs.ConfirmationDialog(
+            this,
+            getString(R.string.editor_clear_all_confirm),
+        ) {
+            binding.editorDrawCanvas.clearAll()
+        }
     }
 
     private var mTextColor: Int = 0
@@ -728,6 +837,10 @@ class EditActivity : BaseCropActivity() {
 
         binding.bottomEditorTextActions.bottomTextUndo.setOnClickListener {
             binding.editorDrawCanvas.undo()
+        }
+
+        binding.bottomEditorTextActions.bottomTextRedo.setOnClickListener {
+            binding.editorDrawCanvas.redo()
         }
 
         // When the user taps a text in the canvas, mirror its properties on

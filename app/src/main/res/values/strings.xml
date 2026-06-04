@@ -397,6 +397,16 @@
     <string name="edit_text_input_hint">Type text to place on photo…</string>
     <string name="edit_text_empty">Type something first.</string>
     <string name="edit_text_title">Edit text</string>
+    <string name="editor_clear_all">Clear all annotations</string>
+    <string name="editor_clear_all_confirm">Remove every stroke and text on the canvas? You can still undo afterwards.</string>
+    <string name="editor_redo">Redo</string>
+    <string name="editor_lasso">Lasso select</string>
+    <string name="editor_lasso_on">Lasso mode on — drag a loop around strokes</string>
+    <string name="editor_lasso_off">Lasso mode off</string>
+    <string name="editor_strokes_selected">%1$d strokes selected</string>
+    <string name="editor_edit_stroke">Edit stroke</string>
+    <string name="editor_change_color">Change color</string>
+    <string name="editor_change_size">Change size</string>
     <string name="live_text_title">Text in this photo</string>
     <string name="live_text_scanning">Scanning…</string>
     <string name="live_text_none_found">No text detected.</string>
