@@ -420,7 +420,12 @@
     <string name="duplicates_delete_extras">Delete extras</string>
     <string name="duplicates_delete_confirm">Delete %1$d duplicate(s) (%2$s)? The newest copy is kept.</string>
     <string name="gp_locked_folder_migrate">Migrate from Google Photos Locked Folder</string>
-    <string name="gp_locked_folder_steps">Google Photos stores its Locked Folder under a path that other apps can\'t read directly. To move those photos into this vault:\n\n1. Open Google Photos.\n2. Go to Library → Utilities → Locked Folder, unlock with your PIN.\n3. Long-press the first photo, then tap Select all.\n4. Hit the ⋮ menu → Move (or Save to device). The photos will reappear in whichever folder Google Photos originally got them from — usually scattered across Pictures / DCIM.\n5. Come back here and tap the Move recently-added button below — it finds every photo added to the device in the chosen time window and bulk-moves them all into the vault in one step, no hunting required.</string>
+    <string name="gp_locked_folder_steps">Google Photos keeps its Locked Folder under storage other apps can\'t read AND encrypts the files with a key derived from your Google account, so there\'s no API path — we can\'t pull them out directly.\n\nReliable workflow:\n\n1. Tap "Snapshot library now" BEFORE you go to Google Photos. This records every photo path on your device so we can spot new ones later.\n2. Open Google Photos → Library → Utilities → Locked Folder, unlock, Select all → ⋮ → Move (out of Locked Folder).\n3. Come back here and tap "Find new photos". Whatever appeared since the snapshot — wherever GP put them — is shown for one-tap bulk move into the vault. This works regardless of the original date GP restores on the file.\n\nIf you forgot to snapshot first, there\'s a fallback that filters by recent file activity, but it can miss photos when GP preserves their original timestamps.</string>
+    <string name="gp_step1_snapshot">Step 1 — Snapshot library now (before GP move)</string>
+    <string name="gp_step2_find_new">Step 2 — Find new photos (after GP move)</string>
+    <string name="gp_recent_fallback">Fallback — Move by recent date</string>
+    <string name="gp_snapshot_done">Library snapshot saved (%1$d photos / videos). Now open Google Photos, move your Locked Folder photos out, then come back and tap Step 2.</string>
+    <string name="gp_no_snapshot">No snapshot found. Tap Step 1 first, then return here after the Google Photos move.</string>
     <string name="gp_locked_folder_run">Move recently-added photos to vault</string>
     <string name="recent_move_title">Move recently-added photos</string>
     <string name="recent_move_prompt">Pick how far back to look. Anything added in that window will be moved into the vault.</string>
@@ -443,6 +448,9 @@
     <string name="memories_no_soundtrack">No soundtrack set.</string>
     <string name="memories_soundtrack_set">Soundtrack set.</string>
     <string name="memories_mute">Mute / unmute soundtrack</string>
+    <string name="memories_show_any">Show any memory now (debug)</string>
+    <string name="memories_none_found">No memory could be built. Diagnostics:\n\n%1$s</string>
+    <string name="memories_searching">Searching for a coherent memory…</string>
     <string name="close">Close</string>
     <string name="live_text_title">Text in this photo</string>
     <string name="live_text_scanning">Scanning…</string>

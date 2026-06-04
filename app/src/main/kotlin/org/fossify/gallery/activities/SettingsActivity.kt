@@ -538,18 +538,96 @@ class SettingsActivity : SimpleActivity() {
         } else {
             getString(R.string.memories_clear_soundtrack)
         }
+        binding.settingsMemoriesTestHolder.setOnClickListener {
+            toast(R.string.memories_searching)
+            org.fossify.commons.helpers.ensureBackgroundThread {
+                val memory = org.fossify.gallery.helpers.MemoriesEngine
+                    .computeAnyMemory(applicationContext)
+                runOnUiThread {
+                    if (memory == null) {
+                        val diag = org.fossify.gallery.helpers.MemoriesEngine
+                            .diagnostics(applicationContext)
+                        androidx.appcompat.app.AlertDialog.Builder(this)
+                            .setMessage(getString(R.string.memories_none_found, diag))
+                            .setPositiveButton(org.fossify.commons.R.string.ok, null)
+                            .show()
+                        return@runOnUiThread
+                    }
+                    val intent = android.content.Intent(this, MemoriesActivity::class.java).apply {
+                        putExtra(MemoriesActivity.EXTRA_PHOTOS, memory.photos.toTypedArray())
+                        putExtra(MemoriesActivity.EXTRA_TITLE, memory.activityLabel)
+                        putExtra(
+                            MemoriesActivity.EXTRA_SUBTITLE,
+                            if (memory.yearsAgo == 1) getString(R.string.memories_one_year_ago)
+                            else if (memory.yearsAgo > 0) getString(R.string.memories_years_ago, memory.yearsAgo)
+                            else getString(R.string.memories_show_any),
+                        )
+                    }
+                    startActivity(intent)
+                }
+            }
+        }
     }
 
     private fun setupGoogleMigrate() {
         binding.settingsGpMigrateHolder.setOnClickListener {
-            androidx.appcompat.app.AlertDialog.Builder(this)
-                .setTitle(R.string.gp_locked_folder_migrate)
-                .setMessage(R.string.gp_locked_folder_steps)
-                .setPositiveButton(R.string.gp_locked_folder_run) { _, _ ->
-                    promptRecentMove()
+            showGpMigrationMenu()
+        }
+    }
+
+    private fun showGpMigrationMenu() {
+        val items = arrayOf(
+            getString(R.string.gp_step1_snapshot),
+            getString(R.string.gp_step2_find_new),
+            getString(R.string.gp_recent_fallback),
+        )
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle(R.string.gp_locked_folder_migrate)
+            .setMessage(R.string.gp_locked_folder_steps)
+            .setItems(items) { _, which ->
+                when (which) {
+                    0 -> runGpSnapshot()
+                    1 -> runGpFindNew()
+                    2 -> promptRecentMove()
                 }
-                .setNegativeButton(org.fossify.commons.R.string.cancel, null)
+            }
+            .setNegativeButton(org.fossify.commons.R.string.cancel, null)
+            .show()
+    }
+
+    private fun runGpSnapshot() {
+        org.fossify.commons.helpers.ensureBackgroundThread {
+            val snap = org.fossify.gallery.helpers.RecentlyAddedMover.snapshotAllPaths(applicationContext)
+            config.gpMigrationSnapshot = snap.joinToString("\n")
+            runOnUiThread {
+                androidx.appcompat.app.AlertDialog.Builder(this)
+                    .setMessage(getString(R.string.gp_snapshot_done, snap.size))
+                    .setPositiveButton(org.fossify.commons.R.string.ok, null)
+                    .show()
+            }
+        }
+    }
+
+    private fun runGpFindNew() {
+        val raw = config.gpMigrationSnapshot
+        if (raw.isEmpty()) {
+            androidx.appcompat.app.AlertDialog.Builder(this)
+                .setMessage(R.string.gp_no_snapshot)
+                .setPositiveButton(org.fossify.commons.R.string.ok, null)
                 .show()
+            return
+        }
+        org.fossify.commons.helpers.ensureBackgroundThread {
+            val snap = raw.split('\n').filter { it.isNotEmpty() }.toHashSet()
+            val matches = org.fossify.gallery.helpers.RecentlyAddedMover
+                .findNewSince(applicationContext, snap)
+            runOnUiThread {
+                if (matches.isEmpty()) {
+                    toast(R.string.recent_move_none)
+                } else {
+                    confirmRecentMove(matches)
+                }
+            }
         }
     }
 
