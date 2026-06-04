@@ -98,10 +98,18 @@ class EditorDrawCanvas(context: Context, attrs: AttributeSet) : View(context, at
 
     private var mSelectedText: Action.Text? = null
 
+    private val mLongPressHandler = android.os.Handler(android.os.Looper.getMainLooper())
+    private var mLongPressRunnable: Runnable? = null
+    private var mLongPressTriggered = false
+
     /** Notified when a text is selected (or deselected with null). The host
      *  activity uses this to mirror its size slider / colour swatch against
      *  the selected annotation. */
     var onTextSelectionChanged: (selected: Action.Text?) -> Unit = {}
+
+    /** Notified when the user long-presses a placed text — host opens the
+     *  edit/delete dialog. */
+    var onTextLongPress: (text: Action.Text) -> Unit = {}
 
     private val mHistory = ArrayList<List<Action>>()
     private var mHistoryIndex = -1
@@ -144,8 +152,19 @@ class EditorDrawCanvas(context: Context, attrs: AttributeSet) : View(context, at
                     canvas.drawPath(action.path, mStrokePaint)
                 }
                 is Action.Text -> {
-                    mTextPaint.color = action.color
                     mTextPaint.textSize = action.sizePx
+                    // Draw a contrast outline first so the text stays legible
+                    // on any background. Outline colour flips between black
+                    // and white depending on the chosen text colour.
+                    mTextPaint.style = Paint.Style.STROKE
+                    mTextPaint.strokeWidth = (action.sizePx * 0.07f).coerceAtLeast(2f)
+                    mTextPaint.strokeJoin = Paint.Join.ROUND
+                    mTextPaint.strokeMiter = 0f
+                    mTextPaint.color = contrastingOutline(action.color)
+                    canvas.drawText(action.text, action.x, action.y, mTextPaint)
+                    // Then the fill on top.
+                    mTextPaint.style = Paint.Style.FILL
+                    mTextPaint.color = action.color
                     canvas.drawText(action.text, action.x, action.y, mTextPaint)
                 }
             }
@@ -228,6 +247,7 @@ class EditorDrawCanvas(context: Context, attrs: AttributeSet) : View(context, at
                 mDownX = event.x
                 mDownY = event.y
                 mDragMovedBeyondSlop = false
+                mLongPressTriggered = false
                 val hit = findTextAt(event.x, event.y)
                 if (hit != null) {
                     mDraggingText = hit
@@ -237,6 +257,18 @@ class EditorDrawCanvas(context: Context, attrs: AttributeSet) : View(context, at
                         mSelectedText = hit
                         onTextSelectionChanged(hit)
                     }
+                    // Arm a long-press timer. If finger stays put for ~500 ms,
+                    // we fire the long-press callback (opens edit/delete dialog).
+                    cancelPendingLongPress()
+                    val target = hit
+                    val runnable = Runnable {
+                        if (!mDragMovedBeyondSlop && mDraggingText === target) {
+                            mLongPressTriggered = true
+                            onTextLongPress(target)
+                        }
+                    }
+                    mLongPressRunnable = runnable
+                    mLongPressHandler.postDelayed(runnable, LONG_PRESS_MS)
                 }
             }
             MotionEvent.ACTION_MOVE -> {
@@ -247,6 +279,8 @@ class EditorDrawCanvas(context: Context, attrs: AttributeSet) : View(context, at
                         dx * dx + dy * dy > mTouchSlop * mTouchSlop
                     ) {
                         mDragMovedBeyondSlop = true
+                        // Cancel the long-press timer — user is dragging.
+                        cancelPendingLongPress()
                     }
                     if (mDragMovedBeyondSlop) {
                         dragging.x = event.x - mDragOffsetX
@@ -255,10 +289,13 @@ class EditorDrawCanvas(context: Context, attrs: AttributeSet) : View(context, at
                 }
             }
             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                cancelPendingLongPress()
                 val moved = mDragMovedBeyondSlop
                 val dragged = mDraggingText
+                val longPressed = mLongPressTriggered
                 mDraggingText = null
                 mDragMovedBeyondSlop = false
+                mLongPressTriggered = false
 
                 if (event.actionMasked == MotionEvent.ACTION_UP) {
                     if (dragged == null) {
@@ -269,11 +306,16 @@ class EditorDrawCanvas(context: Context, attrs: AttributeSet) : View(context, at
                         }
                     }
                 }
-                if (moved && dragged != null) {
+                if (moved && dragged != null && !longPressed) {
                     pushHistory()
                 }
             }
         }
+    }
+
+    private fun cancelPendingLongPress() {
+        mLongPressRunnable?.let { mLongPressHandler.removeCallbacks(it) }
+        mLongPressRunnable = null
     }
 
     private fun findTextAt(x: Float, y: Float): Action.Text? {
@@ -332,6 +374,29 @@ class EditorDrawCanvas(context: Context, attrs: AttributeSet) : View(context, at
             it.sizePx = sizePxFromPercent(percent)
             invalidate()
         }
+    }
+
+    /** Replace the text content of [annotation]. Snapshots history on success. */
+    fun updateTextContent(annotation: Action.Text, newContent: String) {
+        if (newContent.isBlank()) return
+        if (annotation.text == newContent) return
+        if (annotation !in mActions) return
+        annotation.text = newContent
+        invalidate()
+        pushHistory()
+    }
+
+    /** Remove [annotation] from the canvas. Snapshots history. */
+    fun deleteText(annotation: Action.Text) {
+        val removed = mActions.remove(annotation)
+        if (!removed) return
+        if (mSelectedText === annotation) {
+            mSelectedText = null
+            onTextSelectionChanged(null)
+        }
+        if (mDraggingText === annotation) mDraggingText = null
+        invalidate()
+        pushHistory()
     }
 
     /** Snapshot the current action list as a new undo step. Use after applying
@@ -414,5 +479,18 @@ class EditorDrawCanvas(context: Context, attrs: AttributeSet) : View(context, at
             mHistory.removeAt(0)
             mHistoryIndex--
         }
+    }
+
+    private fun contrastingOutline(textColor: Int): Int {
+        val r = Color.red(textColor)
+        val g = Color.green(textColor)
+        val b = Color.blue(textColor)
+        // Standard luma approximation.
+        val luminance = 0.299f * r + 0.587f * g + 0.114f * b
+        return if (luminance > 127f) Color.BLACK else Color.WHITE
+    }
+
+    companion object {
+        private const val LONG_PRESS_MS = 500L
     }
 }

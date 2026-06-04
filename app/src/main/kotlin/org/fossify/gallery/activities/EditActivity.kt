@@ -744,6 +744,42 @@ class EditActivity : BaseCropActivity() {
                 binding.bottomEditorTextActions.bottomTextSize.progress = mTextSizePercent
             }
         }
+
+        // Long-press a placed text → edit/delete dialog.
+        binding.editorDrawCanvas.onTextLongPress = { annotation ->
+            showEditTextDialog(annotation)
+        }
+    }
+
+    private fun showEditTextDialog(annotation: org.fossify.gallery.views.EditorDrawCanvas.Action.Text) {
+        val input = com.google.android.material.textfield.TextInputEditText(this).apply {
+            hint = getString(R.string.edit_text_input_hint)
+            setText(annotation.text)
+            setSelection(text?.length ?: 0)
+            setSingleLine(false)
+            maxLines = 4
+        }
+        val container = android.widget.FrameLayout(this).apply {
+            val pad = resources.getDimensionPixelSize(org.fossify.commons.R.dimen.activity_margin)
+            setPadding(pad, pad / 2, pad, 0)
+            addView(input)
+        }
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle(R.string.edit_text_title)
+            .setView(container)
+            .setPositiveButton(org.fossify.commons.R.string.ok) { _, _ ->
+                val newText = input.text?.toString()?.trim().orEmpty()
+                if (newText.isEmpty()) {
+                    toast(R.string.edit_text_empty)
+                } else {
+                    binding.editorDrawCanvas.updateTextContent(annotation, newText)
+                }
+            }
+            .setNeutralButton(org.fossify.commons.R.string.delete) { _, _ ->
+                binding.editorDrawCanvas.deleteText(annotation)
+            }
+            .setNegativeButton(org.fossify.commons.R.string.cancel, null)
+            .show()
     }
 
     private fun updateTextColorSwatch(color: Int) {
