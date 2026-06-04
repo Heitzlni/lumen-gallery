@@ -68,6 +68,8 @@ class SettingsActivity : SimpleActivity() {
         setupIndexClip()
         setupClearClip()
         setupAutoIndexToggles()
+        setupDuplicates()
+        setupGoogleMigrate()
         setupManageHiddenFolders()
         setupSearchAllFiles()
         setupShowHiddenItems()
@@ -445,6 +447,17 @@ class SettingsActivity : SimpleActivity() {
             }
         }
 
+        binding.settingsAutoIndexDuplicates.isChecked = config.autoIndexDuplicates
+        binding.settingsAutoIndexDuplicatesHolder.setOnClickListener {
+            binding.settingsAutoIndexDuplicates.toggle()
+            config.autoIndexDuplicates = binding.settingsAutoIndexDuplicates.isChecked
+            if (config.autoIndexDuplicates) {
+                org.fossify.gallery.helpers.AutoIndexer.startIfEnabled(applicationContext)
+            } else {
+                org.fossify.gallery.helpers.HashIndexer.cancel()
+            }
+        }
+
         binding.settingsAutoIndexOcr.isChecked = config.autoIndexOcr
         binding.settingsAutoIndexOcrHolder.setOnClickListener {
             binding.settingsAutoIndexOcr.toggle()
@@ -465,6 +478,22 @@ class SettingsActivity : SimpleActivity() {
             } else {
                 org.fossify.gallery.helpers.EmbeddingIndexer.cancel()
             }
+        }
+    }
+
+    private fun setupDuplicates() {
+        binding.settingsFindDuplicatesHolder.setOnClickListener {
+            startActivity(Intent(this, DuplicatesActivity::class.java))
+        }
+    }
+
+    private fun setupGoogleMigrate() {
+        binding.settingsGpMigrateHolder.setOnClickListener {
+            androidx.appcompat.app.AlertDialog.Builder(this)
+                .setTitle(R.string.gp_locked_folder_migrate)
+                .setMessage(R.string.gp_locked_folder_steps)
+                .setPositiveButton(org.fossify.commons.R.string.ok, null)
+                .show()
         }
     }
 

@@ -631,6 +631,10 @@ class Config(context: Context) : BaseConfig(context) {
         get() = prefs.getBoolean(AUTO_INDEX_CLIP, true)
         set(value) = prefs.edit().putBoolean(AUTO_INDEX_CLIP, value).apply()
 
+    var autoIndexDuplicates: Boolean
+        get() = prefs.getBoolean(AUTO_INDEX_DUPLICATES, false)
+        set(value) = prefs.edit().putBoolean(AUTO_INDEX_DUPLICATES, value).apply()
+
     var hiddenFromAllFolders: MutableSet<String>
         get() = prefs.getStringSet(HIDDEN_FROM_ALL_FOLDERS, HashSet())!!
         set(value) = prefs.edit().remove(HIDDEN_FROM_ALL_FOLDERS).putStringSet(HIDDEN_FROM_ALL_FOLDERS, value).apply()
@@ -657,4 +661,5 @@ private const val PREFETCH_SCRUB_THUMBS = "prefetch_scrub_thumbnails"
 private const val AUTO_INDEX_LABELS = "auto_index_labels"
 private const val AUTO_INDEX_OCR = "auto_index_ocr"
 private const val AUTO_INDEX_CLIP = "auto_index_clip"
+private const val AUTO_INDEX_DUPLICATES = "auto_index_duplicates"
 private const val HIDDEN_FROM_ALL_FOLDERS = "hidden_from_all_folders"
