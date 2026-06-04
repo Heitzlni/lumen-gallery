@@ -635,6 +635,34 @@ class Config(context: Context) : BaseConfig(context) {
         get() = prefs.getBoolean(AUTO_INDEX_DUPLICATES, false)
         set(value) = prefs.edit().putBoolean(AUTO_INDEX_DUPLICATES, value).apply()
 
+    var memoriesEnabled: Boolean
+        get() = prefs.getBoolean(MEMORIES_ENABLED, true)
+        set(value) = prefs.edit().putBoolean(MEMORIES_ENABLED, value).apply()
+
+    var memoriesCachedDate: String
+        get() = prefs.getString(MEMORIES_CACHED_DATE, "")!!
+        set(value) = prefs.edit().putString(MEMORIES_CACHED_DATE, value).apply()
+
+    var memoriesCachedPhotos: String
+        get() = prefs.getString(MEMORIES_CACHED_PHOTOS, "")!!
+        set(value) = prefs.edit().putString(MEMORIES_CACHED_PHOTOS, value).apply()
+
+    var memoriesCachedLabel: String
+        get() = prefs.getString(MEMORIES_CACHED_LABEL, "")!!
+        set(value) = prefs.edit().putString(MEMORIES_CACHED_LABEL, value).apply()
+
+    var memoriesCachedYearsAgo: Int
+        get() = prefs.getInt(MEMORIES_CACHED_YEARS_AGO, 0)
+        set(value) = prefs.edit().putInt(MEMORIES_CACHED_YEARS_AGO, value).apply()
+
+    var memoriesCachedDismissed: Boolean
+        get() = prefs.getBoolean(MEMORIES_CACHED_DISMISSED, false)
+        set(value) = prefs.edit().putBoolean(MEMORIES_CACHED_DISMISSED, value).apply()
+
+    var memoriesSoundtrackUri: String
+        get() = prefs.getString(MEMORIES_SOUNDTRACK, "")!!
+        set(value) = prefs.edit().putString(MEMORIES_SOUNDTRACK, value).apply()
+
     var hiddenFromAllFolders: MutableSet<String>
         get() = prefs.getStringSet(HIDDEN_FROM_ALL_FOLDERS, HashSet())!!
         set(value) = prefs.edit().remove(HIDDEN_FROM_ALL_FOLDERS).putStringSet(HIDDEN_FROM_ALL_FOLDERS, value).apply()
@@ -662,4 +690,11 @@ private const val AUTO_INDEX_LABELS = "auto_index_labels"
 private const val AUTO_INDEX_OCR = "auto_index_ocr"
 private const val AUTO_INDEX_CLIP = "auto_index_clip"
 private const val AUTO_INDEX_DUPLICATES = "auto_index_duplicates"
+private const val MEMORIES_ENABLED = "memories_enabled"
+private const val MEMORIES_CACHED_DATE = "memories_cached_date"
+private const val MEMORIES_CACHED_PHOTOS = "memories_cached_photos"
+private const val MEMORIES_CACHED_LABEL = "memories_cached_label"
+private const val MEMORIES_CACHED_YEARS_AGO = "memories_cached_years_ago"
+private const val MEMORIES_CACHED_DISMISSED = "memories_cached_dismissed"
+private const val MEMORIES_SOUNDTRACK = "memories_soundtrack"
 private const val HIDDEN_FROM_ALL_FOLDERS = "hidden_from_all_folders"

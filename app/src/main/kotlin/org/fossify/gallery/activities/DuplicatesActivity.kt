@@ -66,11 +66,19 @@ class DuplicatesActivity : SimpleActivity() {
         binding.duplicatesPlaceholder.beGone()
         binding.duplicatesSummary.text = getString(R.string.duplicates_scanning)
         ensureBackgroundThread {
-            // Build the hash table first if it isn't built yet.
             HashIndexer.indexAll(
                 applicationContext,
-                onProgress = { _, _ -> },
+                onProgress = { current, total ->
+                    runOnUiThread {
+                        binding.duplicatesSummary.text = getString(
+                            R.string.duplicates_scanning_progress, current, total
+                        )
+                    }
+                },
                 onDone = { _, _ ->
+                    runOnUiThread {
+                        binding.duplicatesSummary.text = getString(R.string.duplicates_grouping)
+                    }
                     val groups = DupeFinder.findGroups(applicationContext)
                     runOnUiThread { presentGroups(groups) }
                 },

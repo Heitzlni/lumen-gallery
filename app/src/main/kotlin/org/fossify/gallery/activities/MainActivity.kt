@@ -273,6 +273,51 @@ class MainActivity : SimpleActivity(), DirectoryOperationsListener {
         handleMediaPermissions()
     }
 
+    private fun refreshMemoryBanner() {
+        val banner = binding.memoriesBanner
+        if (!config.memoriesEnabled) {
+            banner.visibility = android.view.View.GONE
+            return
+        }
+        org.fossify.commons.helpers.ensureBackgroundThread {
+            val memory = try {
+                org.fossify.gallery.helpers.MemoriesEngine.computeToday(applicationContext)
+            } catch (_: Exception) {
+                null
+            }
+            runOnUiThread {
+                val dismissed = config.memoriesCachedDismissed
+                if (memory == null || dismissed) {
+                    banner.visibility = android.view.View.GONE
+                    return@runOnUiThread
+                }
+                binding.memoriesBannerSubtitle.text = if (memory.yearsAgo == 1) {
+                    getString(R.string.memories_one_year_ago)
+                } else {
+                    getString(R.string.memories_years_ago, memory.yearsAgo)
+                }
+                binding.memoriesBannerTitle.text = memory.activityLabel
+                com.bumptech.glide.Glide.with(this)
+                    .load(memory.photos.first())
+                    .centerCrop()
+                    .into(binding.memoriesBannerThumb)
+                banner.visibility = android.view.View.VISIBLE
+                banner.setOnClickListener {
+                    val intent = android.content.Intent(this, MemoriesActivity::class.java).apply {
+                        putExtra(MemoriesActivity.EXTRA_PHOTOS, memory.photos.toTypedArray())
+                        putExtra(MemoriesActivity.EXTRA_TITLE, memory.activityLabel)
+                        putExtra(MemoriesActivity.EXTRA_SUBTITLE, binding.memoriesBannerSubtitle.text.toString())
+                    }
+                    startActivity(intent)
+                }
+                binding.memoriesBannerDismiss.setOnClickListener {
+                    config.memoriesCachedDismissed = true
+                    banner.visibility = android.view.View.GONE
+                }
+            }
+        }
+    }
+
     private fun handleMediaPermissions(callback: (() -> Unit)? = null) {
         requestMediaPermissions(enableRationale = true) {
             callback?.invoke()
@@ -320,6 +365,8 @@ class MainActivity : SimpleActivity(), DirectoryOperationsListener {
                 org.fossify.gallery.helpers.AutoIndexer.startIfEnabled(applicationContext)
             }
         }, 3000L)
+
+        refreshMemoryBanner()
 
         if (mStoredAnimateGifs != config.animateGifs) {
             getRecyclerAdapter()?.updateAnimateGifs(config.animateGifs)

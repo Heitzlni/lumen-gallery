@@ -70,6 +70,7 @@ class SettingsActivity : SimpleActivity() {
         setupAutoIndexToggles()
         setupDuplicates()
         setupGoogleMigrate()
+        setupMemoriesToggles()
         setupManageHiddenFolders()
         setupSearchAllFiles()
         setupShowHiddenItems()
@@ -487,13 +488,125 @@ class SettingsActivity : SimpleActivity() {
         }
     }
 
+    private fun setupMemoriesToggles() {
+        binding.settingsMemoriesEnabled.isChecked = config.memoriesEnabled
+        binding.settingsMemoriesEnabledHolder.setOnClickListener {
+            binding.settingsMemoriesEnabled.toggle()
+            config.memoriesEnabled = binding.settingsMemoriesEnabled.isChecked
+        }
+
+        refreshMemoriesSoundtrackLabel()
+        binding.settingsMemoriesSoundtrackHolder.setOnClickListener {
+            if (config.memoriesSoundtrackUri.isNotEmpty()) {
+                androidx.appcompat.app.AlertDialog.Builder(this)
+                    .setMessage(R.string.memories_clear_soundtrack)
+                    .setPositiveButton(org.fossify.commons.R.string.yes) { _, _ ->
+                        config.memoriesSoundtrackUri = ""
+                        refreshMemoriesSoundtrackLabel()
+                    }
+                    .setNegativeButton(org.fossify.commons.R.string.no, null)
+                    .show()
+                return@setOnClickListener
+            }
+            val intent = android.content.Intent(android.content.Intent.ACTION_OPEN_DOCUMENT).apply {
+                addCategory(android.content.Intent.CATEGORY_OPENABLE)
+                type = "audio/*"
+                addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                    android.content.Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)
+            }
+            soundtrackPicker.launch(intent)
+        }
+    }
+
+    private val soundtrackPicker =
+        registerForActivityResult(androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()) { result ->
+            val uri = result.data?.data ?: return@registerForActivityResult
+            try {
+                contentResolver.takePersistableUriPermission(
+                    uri, android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION,
+                )
+            } catch (_: Exception) {
+            }
+            config.memoriesSoundtrackUri = uri.toString()
+            toast(R.string.memories_soundtrack_set)
+            refreshMemoriesSoundtrackLabel()
+        }
+
+    private fun refreshMemoriesSoundtrackLabel() {
+        binding.settingsMemoriesSoundtrack.text = if (config.memoriesSoundtrackUri.isEmpty()) {
+            getString(R.string.memories_pick_soundtrack)
+        } else {
+            getString(R.string.memories_clear_soundtrack)
+        }
+    }
+
     private fun setupGoogleMigrate() {
         binding.settingsGpMigrateHolder.setOnClickListener {
             androidx.appcompat.app.AlertDialog.Builder(this)
                 .setTitle(R.string.gp_locked_folder_migrate)
                 .setMessage(R.string.gp_locked_folder_steps)
-                .setPositiveButton(org.fossify.commons.R.string.ok, null)
+                .setPositiveButton(R.string.gp_locked_folder_run) { _, _ ->
+                    promptRecentMove()
+                }
+                .setNegativeButton(org.fossify.commons.R.string.cancel, null)
                 .show()
+        }
+    }
+
+    private fun promptRecentMove() {
+        val ranges = intArrayOf(10, 60, 360, 1440)
+        val labels = arrayOf(
+            getString(R.string.recent_move_range_10m),
+            getString(R.string.recent_move_range_1h),
+            getString(R.string.recent_move_range_6h),
+            getString(R.string.recent_move_range_24h),
+        )
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle(R.string.recent_move_title)
+            .setMessage(R.string.recent_move_prompt)
+            .setItems(labels) { _, which ->
+                val minutes = ranges[which]
+                org.fossify.commons.helpers.ensureBackgroundThread {
+                    val matches = org.fossify.gallery.helpers.RecentlyAddedMover.findRecent(
+                        applicationContext, minutes
+                    )
+                    runOnUiThread {
+                        if (matches.isEmpty()) {
+                            toast(R.string.recent_move_none)
+                        } else {
+                            confirmRecentMove(matches)
+                        }
+                    }
+                }
+            }
+            .setNegativeButton(org.fossify.commons.R.string.cancel, null)
+            .show()
+    }
+
+    private fun confirmRecentMove(matches: List<org.fossify.gallery.helpers.RecentlyAddedMover.Match>) {
+        org.fossify.commons.dialogs.ConfirmationDialog(
+            this,
+            getString(R.string.recent_move_found, matches.size),
+        ) {
+            val progress = androidx.appcompat.app.AlertDialog.Builder(this)
+                .setTitle(R.string.recent_move_title)
+                .setMessage(getString(R.string.recent_move_progress, 0, matches.size))
+                .setCancelable(false)
+                .show()
+            org.fossify.gallery.helpers.RecentlyAddedMover.moveAll(
+                applicationContext,
+                matches,
+                albumName = getString(R.string.vault),
+                onProgress = { current, total ->
+                    runOnUiThread {
+                        progress.setMessage(getString(R.string.recent_move_progress, current, total))
+                    }
+                },
+                onDone = { moved ->
+                    progress.dismiss()
+                    toast(getString(R.string.recent_move_done, moved))
+                },
+            )
         }
     }
 
