@@ -21,4 +21,8 @@
         android:icon="@drawable/ic_share_vector"
         android:title="@string/share"
         app:showAsAction="ifRoom" />
+    <item
+        android:id="@+id/editor_clear_all"
+        android:title="@string/editor_clear_all"
+        app:showAsAction="never" />
 </menu>

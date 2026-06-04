@@ -1,0 +1,20 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp" android:height="24dp"
+    android:viewportWidth="24" android:viewportHeight="24">
+    <!-- Dashed oval suggesting a lasso selection region. -->
+    <path
+        android:pathData="M12 4 C 8 4 4 7 4 11 C 4 14 6 16 9 17 L 9 19"
+        android:strokeColor="#FFFFFFFF" android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:fillColor="@android:color/transparent"
+        android:trimPathStart="0" android:trimPathEnd="1" />
+    <path
+        android:pathData="M12 4 C 16 4 20 7 20 11 C 20 14 17 17 13 17"
+        android:strokeColor="#FFFFFFFF" android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:fillColor="@android:color/transparent" />
+    <path
+        android:pathData="M9 19 L 12 22"
+        android:strokeColor="#FFFFFFFF" android:strokeWidth="2"
+        android:strokeLineCap="round" />
+</vector>
