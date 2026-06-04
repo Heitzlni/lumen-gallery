@@ -570,29 +570,18 @@ class SettingsActivity : SimpleActivity() {
     }
 
     private fun setupGoogleMigrate() {
+        // First row: tap = show the explanation (no actions). The actions
+        // are their own dedicated rows below so they're obvious.
         binding.settingsGpMigrateHolder.setOnClickListener {
-            showGpMigrationMenu()
+            androidx.appcompat.app.AlertDialog.Builder(this)
+                .setTitle(R.string.gp_locked_folder_migrate)
+                .setMessage(R.string.gp_locked_folder_steps)
+                .setPositiveButton(org.fossify.commons.R.string.ok, null)
+                .show()
         }
-    }
-
-    private fun showGpMigrationMenu() {
-        val items = arrayOf(
-            getString(R.string.gp_step1_snapshot),
-            getString(R.string.gp_step2_find_new),
-            getString(R.string.gp_recent_fallback),
-        )
-        androidx.appcompat.app.AlertDialog.Builder(this)
-            .setTitle(R.string.gp_locked_folder_migrate)
-            .setMessage(R.string.gp_locked_folder_steps)
-            .setItems(items) { _, which ->
-                when (which) {
-                    0 -> runGpSnapshot()
-                    1 -> runGpFindNew()
-                    2 -> promptRecentMove()
-                }
-            }
-            .setNegativeButton(org.fossify.commons.R.string.cancel, null)
-            .show()
+        binding.settingsGpStep1Holder.setOnClickListener { runGpSnapshot() }
+        binding.settingsGpStep2Holder.setOnClickListener { runGpFindNew() }
+        binding.settingsGpFallbackHolder.setOnClickListener { promptRecentMove() }
     }
 
     private fun runGpSnapshot() {
