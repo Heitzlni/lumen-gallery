@@ -473,6 +473,51 @@
             </RelativeLayout>
 
             <RelativeLayout
+                android:id="@+id/settings_gp_step1_holder"
+                style="@style/SettingsHolderTextViewOneLinerStyle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content">
+
+                <org.fossify.commons.views.MyTextView
+                    android:id="@+id/settings_gp_step1"
+                    style="@style/SettingsTextLabelStyle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/gp_step1_snapshot" />
+
+            </RelativeLayout>
+
+            <RelativeLayout
+                android:id="@+id/settings_gp_step2_holder"
+                style="@style/SettingsHolderTextViewOneLinerStyle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content">
+
+                <org.fossify.commons.views.MyTextView
+                    android:id="@+id/settings_gp_step2"
+                    style="@style/SettingsTextLabelStyle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/gp_step2_find_new" />
+
+            </RelativeLayout>
+
+            <RelativeLayout
+                android:id="@+id/settings_gp_fallback_holder"
+                style="@style/SettingsHolderTextViewOneLinerStyle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content">
+
+                <org.fossify.commons.views.MyTextView
+                    android:id="@+id/settings_gp_fallback"
+                    style="@style/SettingsTextLabelStyle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/gp_recent_fallback" />
+
+            </RelativeLayout>
+
+            <RelativeLayout
                 android:id="@+id/settings_manage_hidden_folders_holder"
                 style="@style/SettingsHolderTextViewOneLinerStyle"
                 android:layout_width="match_parent"
