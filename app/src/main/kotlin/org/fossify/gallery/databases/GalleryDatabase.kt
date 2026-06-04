@@ -9,7 +9,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 import org.fossify.gallery.interfaces.*
 import org.fossify.gallery.models.*
 
-@Database(entities = [Directory::class, Medium::class, Widget::class, DateTaken::class, Favorite::class, VaultItem::class, ImageLabel::class, ImageText::class, ImageEmbedding::class], version = 17)
+@Database(entities = [Directory::class, Medium::class, Widget::class, DateTaken::class, Favorite::class, VaultItem::class, ImageLabel::class, ImageText::class, ImageEmbedding::class, ImageHash::class], version = 18)
 abstract class GalleryDatabase : RoomDatabase() {
 
     abstract fun DirectoryDao(): DirectoryDao
@@ -29,6 +29,8 @@ abstract class GalleryDatabase : RoomDatabase() {
     abstract fun ImageTextDao(): ImageTextDao
 
     abstract fun ImageEmbeddingDao(): ImageEmbeddingDao
+
+    abstract fun ImageHashDao(): ImageHashDao
 
     companion object {
         private var db: GalleryDatabase? = null
@@ -52,6 +54,7 @@ abstract class GalleryDatabase : RoomDatabase() {
                             .addMigrations(MIGRATION_14_15)
                             .addMigrations(MIGRATION_15_16)
                             .addMigrations(MIGRATION_16_17)
+                            .addMigrations(MIGRATION_17_18)
                             .build()
                     }
                 }
@@ -171,6 +174,21 @@ abstract class GalleryDatabase : RoomDatabase() {
                         "`indexed_at` INTEGER NOT NULL)"
                 )
                 database.execSQL("CREATE UNIQUE INDEX `index_image_embeddings_media_path` ON `image_embeddings` (`media_path`)")
+            }
+        }
+
+        private val MIGRATION_17_18 = object : Migration(17, 18) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `image_hashes` (" +
+                        "`id` INTEGER PRIMARY KEY AUTOINCREMENT, " +
+                        "`media_path` TEXT NOT NULL, " +
+                        "`phash` INTEGER NOT NULL, " +
+                        "`file_size` INTEGER NOT NULL, " +
+                        "`indexed_at` INTEGER NOT NULL)"
+                )
+                database.execSQL("CREATE UNIQUE INDEX `index_image_hashes_media_path` ON `image_hashes` (`media_path`)")
+                database.execSQL("CREATE INDEX `index_image_hashes_phash` ON `image_hashes` (`phash`)")
             }
         }
     }

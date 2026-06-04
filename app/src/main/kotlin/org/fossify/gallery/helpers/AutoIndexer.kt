@@ -41,6 +41,13 @@ object AutoIndexer {
                 onDone = { _, _ -> EmbeddingSearch.invalidate() },
             )
         }
+        if (cfg.autoIndexDuplicates && !HashIndexer.isRunning) {
+            HashIndexer.indexAll(
+                context = app,
+                onProgress = { _, _ -> },
+                onDone = { _, _ -> },
+            )
+        }
     }
 
     /**
@@ -52,5 +59,6 @@ object AutoIndexer {
         ImageIndexer.cancel()
         TextIndexer.cancel()
         EmbeddingIndexer.cancel()
+        HashIndexer.cancel()
     }
 }
