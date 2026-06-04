@@ -203,6 +203,12 @@
             android:parentActivityName=".activities.SettingsActivity" />
 
         <activity
+            android:name=".activities.MemoriesActivity"
+            android:configChanges="orientation|keyboardHidden|screenSize"
+            android:exported="false"
+            android:theme="@style/TranslucentTheme" />
+
+        <activity
             android:name=".activities.VaultActivity"
             android:configChanges="orientation"
             android:exported="false"

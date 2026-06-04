@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/memories_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@android:color/black">
+
+    <!-- Two cross-fading ImageViews. We alternate between them so Glide can
+         finish loading the next photo before the previous one starts fading. -->
+    <ImageView
+        android:id="@+id/memories_image_a"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:contentDescription="@null"
+        android:scaleType="fitCenter" />
+
+    <ImageView
+        android:id="@+id/memories_image_b"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:alpha="0"
+        android:contentDescription="@null"
+        android:scaleType="fitCenter" />
+
+    <LinearLayout
+        android:id="@+id/memories_top_bar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top"
+        android:background="@drawable/gradient_background"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingHorizontal="@dimen/activity_margin"
+        android:paddingVertical="@dimen/medium_margin">
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/memories_subtitle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:alpha="0.85"
+                android:textColor="@android:color/white"
+                android:textSize="@dimen/smaller_text_size"
+                tools:text="2 years ago" />
+
+            <TextView
+                android:id="@+id/memories_title"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textColor="@android:color/white"
+                android:textSize="@dimen/big_text_size"
+                android:textStyle="bold"
+                tools:text="Hiking on a forest trail" />
+
+        </LinearLayout>
+
+        <ImageButton
+            android:id="@+id/memories_mute"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@string/memories_mute"
+            android:src="@android:drawable/ic_lock_silent_mode_off"
+            android:tint="@android:color/white" />
+
+        <ImageButton
+            android:id="@+id/memories_close"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@string/close"
+            android:src="@android:drawable/ic_menu_close_clear_cancel"
+            android:tint="@android:color/white" />
+
+    </LinearLayout>
+
+</FrameLayout>
