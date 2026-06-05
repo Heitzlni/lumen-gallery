@@ -335,6 +335,10 @@ class MainActivity : SimpleActivity(), DirectoryOperationsListener {
 
     override fun onResume() {
         super.onResume()
+        // If a video is floating in PiP and the user has just returned to
+        // the gallery, expand it back to full-screen so we don't run two
+        // activities simultaneously (which makes everything chunky).
+        ViewPagerActivity.expandFromPipIfActive()
         updateMenuColors()
         config.isThirdPartyIntent = false
         mDateFormat = config.dateFormat

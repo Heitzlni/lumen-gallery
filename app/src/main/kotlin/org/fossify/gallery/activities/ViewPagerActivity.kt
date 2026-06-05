@@ -193,6 +193,37 @@ class ViewPagerActivity : BaseViewerActivity(), ViewPager.OnPageChangeListener, 
         private const val PIP_TOGGLE = "toggle"
         private const val PIP_NEXT = "next"
         private const val PIP_PREV = "prev"
+
+        /** Weak reference to the currently-resident ViewPagerActivity so other
+         *  activities (MainActivity, MediaActivity) can ask it to expand from
+         *  PiP back to full-screen when the user returns to the gallery. */
+        @Volatile
+        private var activeInstance: java.lang.ref.WeakReference<ViewPagerActivity>? = null
+
+        /**
+         * If a ViewPagerActivity is currently floating in PiP, bring it
+         * back to the top of the task stack — Android exits PiP back into
+         * full-screen as a side effect. Called from MainActivity / MediaActivity
+         * onResume so the user returning to the gallery doesn't end up with
+         * a chunky two-activities-rendering-at-once experience.
+         */
+        @JvmStatic
+        fun expandFromPipIfActive() {
+            val ref = activeInstance ?: return
+            val activity = ref.get() ?: return
+            if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.O) return
+            if (!activity.isInPictureInPictureMode) return
+            try {
+                val intent = Intent(activity, ViewPagerActivity::class.java).apply {
+                    addFlags(
+                        Intent.FLAG_ACTIVITY_SINGLE_TOP or
+                            Intent.FLAG_ACTIVITY_REORDER_TO_FRONT,
+                    )
+                }
+                activity.startActivity(intent)
+            } catch (_: Exception) {
+            }
+        }
     }
 
     private var mPath = ""
@@ -228,6 +259,7 @@ class ViewPagerActivity : BaseViewerActivity(), ViewPager.OnPageChangeListener, 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(binding.root)
+        activeInstance = java.lang.ref.WeakReference(this)
         setupEdgeToEdge(
             padBottomSystem = listOf(binding.bottomActions.bottomActionsWrapper),
         )
@@ -566,6 +598,7 @@ class ViewPagerActivity : BaseViewerActivity(), ViewPager.OnPageChangeListener, 
 
     override fun onDestroy() {
         super.onDestroy()
+        if (activeInstance?.get() === this) activeInstance = null
         try {
             unregisterReceiver(mPipActionReceiver)
         } catch (_: Exception) {
