@@ -246,6 +246,11 @@ class ViewPagerActivity : BaseViewerActivity(), ViewPager.OnPageChangeListener, 
             }
         }
 
+        // Hard-pause the player when the screen turns off, even if we're
+        // floating in PiP — keeping a video playing audio with no display
+        // is bad UX and a battery drain.
+        registerReceiver(mScreenOffReceiver, android.content.IntentFilter(Intent.ACTION_SCREEN_OFF))
+
         setupOptionsMenu()
         refreshMenuItems()
 
@@ -276,21 +281,43 @@ class ViewPagerActivity : BaseViewerActivity(), ViewPager.OnPageChangeListener, 
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-        setIntent(intent)
         val newPath = intent.getStringExtra(PATH)
             ?: intent.data?.let { getDataColumn(it) }
         android.util.Log.d(
             "ViewPagerActivity",
-            "onNewIntent fired — newPath=$newPath  mPath=$mPath"
+            "onNewIntent fired — newPath=$newPath  mPath=$mPath  pip=${android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O && isInPictureInPictureMode}"
         )
-        if (newPath.isNullOrEmpty() || newPath == mPath) return
+        if (newPath.isNullOrEmpty() || newPath == mPath) {
+            setIntent(intent)
+            return
+        }
 
-        // Force the activity to rebuild with the new intent. recreate()
-        // will dispatch onCreate again; the onCreate path comparison
-        // above ensures SAVED_PATH from the previous instance doesn't
-        // shadow the new intent's PATH.
         (getCurrentFragment() as? org.fossify.gallery.fragments.VideoFragment)
             ?.releaseFromPip()
+
+        // When we get a new clip path while in PiP, recreate() inside the
+        // PiP window kept showing the old video because Android doesn't
+        // automatically transition out of PiP for a same-instance intent.
+        // Hard-reset by finishing this task entirely and starting a fresh
+        // activity in its own task — that forces PiP to tear down and the
+        // new path opens full-screen.
+        val inPip = android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O &&
+            isInPictureInPictureMode
+        if (inPip) {
+            val freshIntent = Intent(this, ViewPagerActivity::class.java).apply {
+                putExtras(intent.extras ?: Bundle())
+                data = intent.data
+                addFlags(
+                    Intent.FLAG_ACTIVITY_NEW_TASK or
+                        Intent.FLAG_ACTIVITY_CLEAR_TASK,
+                )
+            }
+            finishAndRemoveTask()
+            startActivity(freshIntent)
+            return
+        }
+
+        setIntent(intent)
         recreate()
     }
 
@@ -299,6 +326,17 @@ class ViewPagerActivity : BaseViewerActivity(), ViewPager.OnPageChangeListener, 
         if (!hasPermission(getPermissionToRequest())) {
             finish()
             return
+        }
+
+        // Defensive: if the slideshow animator (or a PiP transition that
+        // killed it mid-flight) left the ViewPager in a fake-drag state,
+        // swipe is dead until the drag ends. Forcibly close any pending
+        // fake drag on resume so horizontal swipes work again.
+        try {
+            if (binding.viewPager.isFakeDragging) {
+                binding.viewPager.endFakeDrag()
+            }
+        } catch (_: Exception) {
         }
 
         initBottomActions()
@@ -335,6 +373,27 @@ class ViewPagerActivity : BaseViewerActivity(), ViewPager.OnPageChangeListener, 
     }
 
     // ---- PiP RemoteActions: prev / play-pause / next ---------------------
+
+    private val mScreenOffReceiver = object : android.content.BroadcastReceiver() {
+        override fun onReceive(c: android.content.Context, intent: Intent) {
+            // Whether we're in PiP or full screen, if the display is gone the
+            // video has nothing to render to — release the player so audio
+            // doesn't keep blasting from a black-screen state.
+            (getCurrentFragment() as? org.fossify.gallery.fragments.VideoFragment)
+                ?.releaseFromPip()
+            // If we're in PiP, tear the window down — the activity will
+            // resume cleanly on next unlock and the user can re-open the
+            // video deliberately.
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O &&
+                isInPictureInPictureMode
+            ) {
+                try {
+                    finishAndRemoveTask()
+                } catch (_: Exception) {
+                }
+            }
+        }
+    }
 
     private val mPipActionReceiver = object : android.content.BroadcastReceiver() {
         override fun onReceive(c: android.content.Context, intent: android.content.Intent) {
@@ -509,6 +568,10 @@ class ViewPagerActivity : BaseViewerActivity(), ViewPager.OnPageChangeListener, 
         super.onDestroy()
         try {
             unregisterReceiver(mPipActionReceiver)
+        } catch (_: Exception) {
+        }
+        try {
+            unregisterReceiver(mScreenOffReceiver)
         } catch (_: Exception) {
         }
         ColorModeHelper.resetColorMode(this)
