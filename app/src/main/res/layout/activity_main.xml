@@ -66,6 +66,7 @@
             android:id="@+id/directories_switch_searching"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:layout_below="@+id/memories_banner"
             android:background="?attr/selectableItemBackground"
             android:gravity="center"
             android:padding="@dimen/activity_margin"
@@ -76,7 +77,7 @@
             android:id="@+id/directories_empty_placeholder"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_below="@+id/memories_banner"
+            android:layout_below="@+id/directories_switch_searching"
             android:alpha="0.8"
             android:gravity="center_horizontal"
             android:paddingStart="@dimen/activity_margin"
@@ -103,7 +104,7 @@
             android:id="@+id/directories_refresh_layout"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_below="@+id/memories_banner">
+            android:layout_below="@+id/directories_switch_searching">
 
             <com.qtalk.recyclerviewfastscroller.RecyclerViewFastScroller
                 android:id="@+id/directories_fastscroller"

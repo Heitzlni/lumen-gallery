@@ -202,6 +202,11 @@ class MediaActivity : SimpleActivity(), MediaOperationsListener {
 
     override fun onResume() {
         super.onResume()
+        // If a video is floating in PiP and the user has just navigated
+        // back into the gallery, expand it back to full-screen rather than
+        // letting two activities render side-by-side (which is what makes
+        // thumbnails look chunky and the app feel laggy).
+        ViewPagerActivity.expandFromPipIfActive()
         updateMenuColors()
         if (mStoredAnimateGifs != config.animateGifs) {
             getMediaAdapter()?.updateAnimateGifs(config.animateGifs)
