@@ -33,6 +33,12 @@ class AlbumSmartCreateActivity : SimpleActivity() {
     private val selectedPaths = LinkedHashSet<String>()
     private var lastResults: List<String> = emptyList()
 
+    /** If non-zero, we're in "smart add to existing album" mode rather than
+     *  creating a new album. The name field gets hidden and the confirm
+     *  button labels itself "Add to X". */
+    private var targetAlbumId: Long = -1L
+    private var targetAlbumName: String = ""
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(binding.root)
@@ -40,6 +46,16 @@ class AlbumSmartCreateActivity : SimpleActivity() {
             padTopSystem = listOf(binding.albumSmartAppbar),
             padBottomSystem = listOf(binding.albumSmartCreate),
         )
+        targetAlbumId = intent.getLongExtra(EXTRA_TARGET_ALBUM_ID, -1L)
+        targetAlbumName = intent.getStringExtra(EXTRA_TARGET_ALBUM_NAME).orEmpty()
+        if (targetAlbumId > 0L) {
+            // Add-mode: the user is appending to an existing album. Hide
+            // the name input + label since it's redundant.
+            binding.albumSmartNameLabel.visibility = android.view.View.GONE
+            binding.albumSmartName.visibility = android.view.View.GONE
+            binding.albumSmartName.setText(targetAlbumName)
+            binding.albumSmartToolbar.title = getString(R.string.albums_smart_add_to_existing, targetAlbumName)
+        }
         adapter = AlbumPhotosAdapter(
             context = this,
             paths = mutableListOf(),
@@ -73,7 +89,13 @@ class AlbumSmartCreateActivity : SimpleActivity() {
     private fun refreshCreateButton() {
         val nameOk = binding.albumSmartName.text?.toString()?.trim()?.isNotEmpty() == true
         binding.albumSmartCreate.isEnabled = nameOk && selectedPaths.isNotEmpty()
-        binding.albumSmartCreate.text = if (selectedPaths.isEmpty()) {
+        binding.albumSmartCreate.text = if (targetAlbumId > 0L) {
+            if (selectedPaths.isEmpty()) {
+                getString(R.string.albums_smart_add_to_existing, targetAlbumName)
+            } else {
+                getString(R.string.albums_added_to_existing, selectedPaths.size, targetAlbumName)
+            }
+        } else if (selectedPaths.isEmpty()) {
             getString(R.string.albums_create)
         } else {
             getString(R.string.albums_smart_create_album, selectedPaths.size.toString())
@@ -126,9 +148,24 @@ class AlbumSmartCreateActivity : SimpleActivity() {
     }
 
     private fun createAlbum() {
-        val name = binding.albumSmartName.text?.toString()?.trim().orEmpty()
-        if (name.isEmpty() || selectedPaths.isEmpty()) return
+        if (selectedPaths.isEmpty()) return
         val pathsToAdd = selectedPaths.toList()
+        if (targetAlbumId > 0L) {
+            // Add-mode — write into the existing album instead of creating one.
+            ensureBackgroundThread {
+                val now = System.currentTimeMillis()
+                applicationContext.albumDB.insertItems(pathsToAdd.map {
+                    AlbumItem(id = null, albumId = targetAlbumId, mediaPath = it, addedAt = now)
+                })
+                runOnUiThread {
+                    toast(getString(R.string.albums_added_to_existing, pathsToAdd.size, targetAlbumName))
+                    finish()
+                }
+            }
+            return
+        }
+        val name = binding.albumSmartName.text?.toString()?.trim().orEmpty()
+        if (name.isEmpty()) return
         ensureBackgroundThread {
             val dao = applicationContext.albumDB
             val existing = dao.getByName(name)
@@ -148,5 +185,10 @@ class AlbumSmartCreateActivity : SimpleActivity() {
                 finish()
             }
         }
+    }
+
+    companion object {
+        const val EXTRA_TARGET_ALBUM_ID = "target_album_id"
+        const val EXTRA_TARGET_ALBUM_NAME = "target_album_name"
     }
 }
