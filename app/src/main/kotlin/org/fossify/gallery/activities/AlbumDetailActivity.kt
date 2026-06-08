@@ -48,11 +48,72 @@ class AlbumDetailActivity : SimpleActivity() {
         binding.albumDetailToolbar.inflateMenu(R.menu.menu_album_detail)
         binding.albumDetailToolbar.setOnMenuItemClickListener { item ->
             when (item.itemId) {
+                R.id.album_detail_play -> { showPlayChooser(); true }
+                R.id.album_detail_smart_add -> { launchSmartAddMore(); true }
                 R.id.album_detail_select_all -> { adapter.selectAll(); true }
                 R.id.album_detail_remove -> { confirmRemove(adapter.selectedPaths()); true }
                 else -> false
             }
         }
+    }
+
+    private fun showPlayChooser() {
+        val videos = adapter.paths
+            .filter { p ->
+                val ext = p.substringAfterLast('.', "").lowercase()
+                ext in VIDEO_EXTS
+            }
+        val queueActive = org.fossify.gallery.helpers.PlaybackQueue.isActive
+        if (videos.isEmpty() && !queueActive) {
+            toast(R.string.albums_no_videos_in_album)
+            return
+        }
+        val items = arrayListOf<org.fossify.commons.models.RadioItem>()
+        if (videos.isNotEmpty()) {
+            items.add(org.fossify.commons.models.RadioItem(0, getString(R.string.playback_queue_play_in_order)))
+            items.add(org.fossify.commons.models.RadioItem(1, getString(R.string.playback_queue_shuffle)))
+        }
+        if (queueActive) {
+            items.add(org.fossify.commons.models.RadioItem(2, getString(R.string.playback_queue_stop)))
+        }
+        org.fossify.commons.dialogs.RadioGroupDialog(this, items) { result ->
+            when (result as Int) {
+                0 -> startAlbumPlayback(videos, shuffle = false)
+                1 -> startAlbumPlayback(videos, shuffle = true)
+                2 -> {
+                    org.fossify.gallery.helpers.PlaybackQueue.clear()
+                    toast(R.string.playback_queue_cleared)
+                }
+            }
+        }
+    }
+
+    private fun startAlbumPlayback(videos: List<String>, shuffle: Boolean) {
+        org.fossify.gallery.helpers.PlaybackQueue.setQueue(videos, shuffle)
+        val first = org.fossify.gallery.helpers.PlaybackQueue.next(null) ?: return
+        toast(getString(R.string.playback_queue_started, videos.size))
+        val intent = android.content.Intent(this, ViewPagerActivity::class.java).apply {
+            putExtra(org.fossify.gallery.helpers.PATH, first)
+            putExtra(org.fossify.gallery.helpers.SKIP_AUTHENTICATION, true)
+            putExtra(org.fossify.commons.helpers.IS_FROM_GALLERY, true)
+        }
+        startActivity(intent)
+    }
+
+    private fun launchSmartAddMore() {
+        if (albumId <= 0L) return
+        val intent = android.content.Intent(this, AlbumSmartCreateActivity::class.java).apply {
+            putExtra(AlbumSmartCreateActivity.EXTRA_TARGET_ALBUM_ID, albumId)
+            putExtra(AlbumSmartCreateActivity.EXTRA_TARGET_ALBUM_NAME, albumName)
+        }
+        startActivity(intent)
+    }
+
+    companion object {
+        const val EXTRA_ALBUM_ID = "album_id"
+        private val VIDEO_EXTS = setOf(
+            "mp4", "mkv", "webm", "mov", "avi", "m4v", "3gp", "ts", "mts", "wmv", "flv"
+        )
     }
 
     override fun onResume() {
@@ -141,9 +202,5 @@ class AlbumDetailActivity : SimpleActivity() {
             .into(iv)
         dialog.setContentView(iv)
         dialog.show()
-    }
-
-    companion object {
-        const val EXTRA_ALBUM_ID = "album_id"
     }
 }

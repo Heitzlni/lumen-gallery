@@ -539,13 +539,20 @@ class VideoFragment : ViewPagerFragment(), TextureView.SurfaceTextureListener,
         if (mIsFragmentVisible && !menuVisible) {
             pauseVideo()
             // Swiping AWAY from this video. If the user has "Remember last
-            // video position" disabled, wipe the in-memory pause point so a
-            // later swipe back doesn't seek to where we left off. Without
-            // this the cached fragment's pauseVideo() set mPositionAtPause,
-            // and the next playVideo() seeked to it regardless of the toggle.
+            // video position" disabled, reset everything that tracks the
+            // playback point so a later swipe back starts fresh:
+            //   1. mPositionAtPause — our own bookkeeping for resume.
+            //   2. The ExoPlayer's internal seek position — the player
+            //      itself remembers where it stopped; if we don't seek
+            //      back to 0, the next playVideo() resumes from the
+            //      paused timestamp regardless of mPositionAtPause.
             if (this::mConfig.isInitialized && !mConfig.rememberLastVideoPosition) {
                 mPositionAtPause = 0L
                 mWasLastPositionRestored = false
+                try {
+                    mExoPlayer?.seekTo(0L)
+                } catch (_: Exception) {
+                }
             }
         }
 

@@ -489,6 +489,10 @@
     <string name="albums_no_query">Type something to search for first.</string>
     <string name="albums_match_count">%1$d photo(s) match — tap to toggle</string>
     <string name="albums_top_menu">Open Albums</string>
+    <string name="albums_smart_add_more">Add more via smart search…</string>
+    <string name="albums_smart_add_to_existing">Add to %1$s</string>
+    <string name="albums_added_to_existing">Added %1$d photo(s) to %2$s.</string>
+    <string name="albums_no_videos_in_album">This album has no videos to play.</string>
     <string name="close">Close</string>
     <string name="live_text_title">Text in this photo</string>
     <string name="live_text_scanning">Scanning…</string>

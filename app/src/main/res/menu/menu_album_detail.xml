@@ -5,6 +5,17 @@
     tools:ignore="AppCompatResource">
 
     <item
+        android:id="@+id/album_detail_play"
+        android:icon="@drawable/ic_play_vector"
+        android:title="@string/play_all_videos"
+        app:showAsAction="ifRoom" />
+
+    <item
+        android:id="@+id/album_detail_smart_add"
+        android:title="@string/albums_smart_add_more"
+        app:showAsAction="never" />
+
+    <item
         android:id="@+id/album_detail_select_all"
         android:icon="@drawable/ic_select_all_vector"
         android:title="@string/select_all"
