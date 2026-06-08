@@ -209,6 +209,26 @@
             android:theme="@style/TranslucentTheme" />
 
         <activity
+            android:name=".activities.AlbumsActivity"
+            android:configChanges="orientation"
+            android:exported="false"
+            android:label="@string/albums_title"
+            android:parentActivityName=".activities.MainActivity" />
+
+        <activity
+            android:name=".activities.AlbumDetailActivity"
+            android:configChanges="orientation"
+            android:exported="false"
+            android:parentActivityName=".activities.AlbumsActivity" />
+
+        <activity
+            android:name=".activities.AlbumSmartCreateActivity"
+            android:configChanges="orientation"
+            android:exported="false"
+            android:label="@string/albums_smart_title"
+            android:parentActivityName=".activities.AlbumsActivity" />
+
+        <activity
             android:name=".activities.VaultActivity"
             android:configChanges="orientation"
             android:exported="false"

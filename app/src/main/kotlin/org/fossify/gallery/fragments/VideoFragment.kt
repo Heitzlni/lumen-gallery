@@ -119,6 +119,7 @@ class VideoFragment : ViewPagerFragment(), TextureView.SurfaceTextureListener,
     var mIsPlaying = false
 
     private var mExoPlayer: ExoPlayer? = null
+    private var mMediaSession: org.fossify.gallery.helpers.MediaSessionHolder? = null
     private var mVideoSize = Point(1, 1)
     private var mTimerHandler = Handler()
 
@@ -661,11 +662,16 @@ class VideoFragment : ViewPagerFragment(), TextureView.SurfaceTextureListener,
                 }
                 setPlaybackSpeed(mConfig.playbackSpeed)
                 setMediaSource(mediaSource)
+                // handleAudioFocus = true makes ExoPlayer cooperate with other
+                // media apps: pause automatically when Spotify / a phone call /
+                // a navigation prompt takes audio focus, resume on focus regain.
                 setAudioAttributes(
                     AudioAttributes
                         .Builder()
-                        .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
-                        .build(), false
+                        .setContentType(C.AUDIO_CONTENT_TYPE_MOVIE)
+                        .setUsage(C.USAGE_MEDIA)
+                        .build(),
+                    /* handleAudioFocus = */ true,
                 )
                 prepare()
 
@@ -1022,6 +1028,38 @@ class VideoFragment : ViewPagerFragment(), TextureView.SurfaceTextureListener,
         mExoPlayer?.playWhenReady = true
         activity?.window?.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         notifyPipPlayStateChanged()
+        ensureMediaSession()
+        updateMediaSessionState()
+    }
+
+    private fun ensureMediaSession() {
+        val ctx = context ?: return
+        if (mMediaSession == null) {
+            val session = org.fossify.gallery.helpers.MediaSessionHolder(ctx.applicationContext)
+            session.setCallbacks(
+                onPlay = { if (!mIsPlaying) playVideo() },
+                onPause = { if (mIsPlaying) pauseVideo() },
+                onSkipNext = { listener?.goToNextItem() },
+                onSkipPrev = { listener?.goToPrevItem() },
+                onSeekTo = { pos ->
+                    mExoPlayer?.seekTo(pos)
+                },
+                onStop = { if (mIsPlaying) pauseVideo() },
+            )
+            mMediaSession = session
+        }
+        val title = arguments?.getSerializable(MEDIUM)?.let { (it as? org.fossify.gallery.models.Medium)?.name }
+            ?: "Video"
+        mMediaSession?.updateMetadata(title, (mExoPlayer?.duration ?: 0L).coerceAtLeast(0L))
+        mMediaSession?.activate()
+    }
+
+    private fun updateMediaSessionState() {
+        mMediaSession?.updateState(
+            isPlaying = mIsPlaying,
+            positionMs = mExoPlayer?.currentPosition ?: 0L,
+            speed = mConfig.playbackSpeed,
+        )
     }
 
     private fun pauseVideo() {
@@ -1038,6 +1076,7 @@ class VideoFragment : ViewPagerFragment(), TextureView.SurfaceTextureListener,
         activity?.window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         mPositionAtPause = mExoPlayer?.currentPosition ?: 0L
         notifyPipPlayStateChanged()
+        updateMediaSessionState()
     }
 
     /** Public entry point so [ViewPagerActivity]'s PiP RemoteAction
@@ -1429,6 +1468,8 @@ class VideoFragment : ViewPagerFragment(), TextureView.SurfaceTextureListener,
             release()
         }
         mExoPlayer = null
+        mMediaSession?.release()
+        mMediaSession = null
     }
 
     override fun onSurfaceTextureSizeChanged(surface: SurfaceTexture, width: Int, height: Int) {}

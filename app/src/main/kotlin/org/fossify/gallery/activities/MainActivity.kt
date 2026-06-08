@@ -577,6 +577,7 @@ class MainActivity : SimpleActivity(), DirectoryOperationsListener {
                 R.id.filter -> showFilterMediaDialog()
                 R.id.open_camera -> launchCamera()
                 R.id.show_all -> showAllMedia()
+                R.id.open_albums -> startActivity(android.content.Intent(this, AlbumsActivity::class.java))
                 R.id.change_view_type -> changeViewType()
                 R.id.temporarily_show_hidden -> tryToggleTemporarilyShowHidden()
                 R.id.stop_showing_hidden -> tryToggleTemporarilyShowHidden()

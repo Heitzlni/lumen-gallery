@@ -16,6 +16,7 @@ androidx-security-crypto = "1.1.0-alpha06"
 mlkit-image-labeling = "17.0.9"
 mlkit-text-recognition = "16.0.1"
 onnxruntime-android = "1.19.0"
+androidx-media = "1.7.0"
 #exif
 exif = "1.0.1"
 #Room
@@ -60,6 +61,7 @@ androidx-security-crypto = { module = "androidx.security:security-crypto", versi
 mlkit-image-labeling = { module = "com.google.mlkit:image-labeling", version.ref = "mlkit-image-labeling" }
 mlkit-text-recognition = { module = "com.google.mlkit:text-recognition", version.ref = "mlkit-text-recognition" }
 onnxruntime-android = { module = "com.microsoft.onnxruntime:onnxruntime-android", version.ref = "onnxruntime-android" }
+androidx-media = { module = "androidx.media:media", version.ref = "androidx-media" }
 #exif
 exif = { module = "it.sephiroth.android.exif:library", version.ref = "exif" }
 #Room

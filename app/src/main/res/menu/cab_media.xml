@@ -98,6 +98,16 @@
         android:title="@string/trim_video"
         app:showAsAction="never" />
     <item
+        android:id="@+id/cab_extract_audio"
+        android:showAsAction="never"
+        android:title="@string/extract_audio"
+        app:showAsAction="never" />
+    <item
+        android:id="@+id/cab_add_to_album"
+        android:showAsAction="never"
+        android:title="@string/add_to_album"
+        app:showAsAction="never" />
+    <item
         android:id="@+id/cab_edit"
         android:icon="@drawable/ic_edit_vector"
         android:title="@string/edit"
