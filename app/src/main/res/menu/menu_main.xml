@@ -14,6 +14,11 @@
         android:title="@string/show_all"
         app:showAsAction="always" />
     <item
+        android:id="@+id/open_albums"
+        android:icon="@drawable/ic_folders_vector"
+        android:title="@string/albums_top_menu"
+        app:showAsAction="ifRoom" />
+    <item
         android:id="@+id/sort"
         android:icon="@drawable/ic_sort_vector"
         android:title="@string/sort_by"

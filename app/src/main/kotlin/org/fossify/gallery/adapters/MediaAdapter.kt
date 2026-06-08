@@ -204,6 +204,9 @@ class MediaAdapter(
             findItem(R.id.cab_resize).isVisible = canResize(selectedItems)
             findItem(R.id.cab_trim_video).isVisible =
                 isOneItemSelected && !isInRecycleBin && (selectedItems.firstOrNull()?.isVideo() == true)
+            findItem(R.id.cab_extract_audio).isVisible =
+                !isInRecycleBin && selectedItems.all { it.isVideo() }
+            findItem(R.id.cab_add_to_album).isVisible = !isInRecycleBin
             findItem(R.id.cab_confirm_selection).isVisible = isAGetIntent && allowMultiplePicks && selectedKeys.isNotEmpty()
             findItem(R.id.cab_restore_recycle_bin_files).isVisible = selectedPaths.all { it.startsWith(activity.recycleBinPath) }
             findItem(R.id.cab_create_shortcut).isVisible = isOneItemSelected
@@ -242,6 +245,8 @@ class MediaAdapter(
             R.id.cab_set_as -> setAs()
             R.id.cab_resize -> resize()
             R.id.cab_trim_video -> launchVideoTrim()
+            R.id.cab_extract_audio -> extractAudioFromSelection()
+            R.id.cab_add_to_album -> addSelectionToAlbum()
             R.id.cab_delete -> checkDeleteConfirmation()
         }
     }
@@ -480,6 +485,51 @@ class MediaAdapter(
         }
         activity.startActivity(intent)
         finishActMode()
+    }
+
+    private fun extractAudioFromSelection() {
+        val sources = getSelectedItems()
+            .filter { it.isVideo() }
+            .map { it.path }
+        if (sources.isEmpty()) return
+        val progress = androidx.appcompat.app.AlertDialog.Builder(activity)
+            .setTitle(R.string.extract_audio)
+            .setMessage(activity.getString(R.string.extract_audio_progress, 0, sources.size))
+            .setCancelable(false)
+            .show()
+        org.fossify.gallery.helpers.AudioExtractor.extractBatch(
+            context = activity.applicationContext,
+            sources = sources,
+            onProgress = { current, total, _ ->
+                activity.runOnUiThread {
+                    progress.setMessage(
+                        activity.getString(R.string.extract_audio_progress, current, total)
+                    )
+                }
+            },
+            onAllDone = { results ->
+                activity.runOnUiThread {
+                    progress.dismiss()
+                    val ok = results.count { it.outputPath != null }
+                    val fail = results.size - ok
+                    val msg = if (fail == 0) {
+                        activity.getString(R.string.extract_audio_done, ok)
+                    } else {
+                        activity.getString(R.string.extract_audio_done_partial, ok, fail)
+                    }
+                    activity.toast(msg)
+                    finishActMode()
+                }
+            },
+        )
+    }
+
+    private fun addSelectionToAlbum() {
+        val paths = getSelectedItems().map { it.path }
+        if (paths.isEmpty()) return
+        org.fossify.gallery.dialogs.AddToAlbumDialog(activity, paths) {
+            finishActMode()
+        }
     }
 
     private fun tryMoveToVault() {

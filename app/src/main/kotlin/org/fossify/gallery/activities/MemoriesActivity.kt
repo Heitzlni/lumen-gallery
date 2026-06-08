@@ -5,7 +5,7 @@ import android.net.Uri
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
-import android.view.GestureDetector
+import android.os.SystemClock
 import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
@@ -21,14 +21,12 @@ import org.fossify.gallery.databinding.ActivityMemoriesBinding
 import org.fossify.gallery.extensions.config
 
 /**
- * Full-screen memory slideshow. Cross-fades between photos every
- * [PHOTO_DURATION_MS] and plays the user's chosen soundtrack on loop in
- * the background (if any has been set in Settings).
- *
- * Touch:
- *   - tap once to pause/resume auto-advance
- *   - swipe left to skip, swipe right to go back
- *   - back button closes
+ * Instagram-/WhatsApp-style "story" memory player. Each photo gets a
+ * segment in the top progress bar; the active segment fills smoothly
+ * as the photo is shown. Tap the left third / right third to jump,
+ * tap the centre to pause/resume, tap-and-hold to pause + reveal full
+ * chrome. Background soundtrack plays from the user's chosen URI if
+ * one is set in Settings.
  */
 class MemoriesActivity : SimpleActivity() {
 
@@ -41,16 +39,21 @@ class MemoriesActivity : SimpleActivity() {
     private var muted = false
     private var paused = false
     private var index = 0
-    /** Which ImageView currently displays the visible photo. We swap A↔B. */
     private var showingA = true
+    private var photoStartedAt = 0L
+    private var elapsedBeforePause = 0L
 
     private val handler = Handler(Looper.getMainLooper())
-    private val advance: Runnable = object : Runnable {
+    private val tickRunnable: Runnable = object : Runnable {
         override fun run() {
-            if (!paused && photos.isNotEmpty()) {
-                index = (index + 1) % photos.size
-                showAt(index, animate = true)
-                handler.postDelayed(this, PHOTO_DURATION_MS)
+            if (paused || photos.isEmpty()) return
+            val elapsed = SystemClock.uptimeMillis() - photoStartedAt + elapsedBeforePause
+            val progress = elapsed.toFloat() / PHOTO_DURATION_MS
+            if (progress >= 1f) {
+                advance(forward = true)
+            } else {
+                binding.memoriesProgress.currentProgress = progress
+                handler.postDelayed(this, 16L)
             }
         }
     }
@@ -72,47 +75,25 @@ class MemoriesActivity : SimpleActivity() {
             finish()
             return
         }
+        if (photos.size > MAX_STORY_PHOTOS) {
+            photos = photos.take(MAX_STORY_PHOTOS)
+        }
 
         binding.memoriesSubtitle.text = subtitleText
         binding.memoriesTitle.text = titleText
+        binding.memoriesProgress.segmentCount = photos.size
         binding.memoriesClose.setOnClickListener { finish() }
         binding.memoriesMute.setOnClickListener { toggleMute() }
-
-        // Gesture handling on the root: single tap = pause/resume,
-        // horizontal swipe = next/prev photo.
-        val gesture = GestureDetector(this, object : GestureDetector.SimpleOnGestureListener() {
-            override fun onSingleTapConfirmed(e: MotionEvent): Boolean {
-                togglePaused()
-                return true
-            }
-
-            override fun onFling(
-                e1: MotionEvent?, e2: MotionEvent, velX: Float, velY: Float
-            ): Boolean {
-                if (kotlin.math.abs(velX) < 600f) return false
-                if (velX < 0) {
-                    // Swipe left → next.
-                    index = (index + 1) % photos.size
-                } else {
-                    index = (index - 1 + photos.size) % photos.size
-                }
-                showAt(index, animate = true)
-                resetAdvance()
-                return true
-            }
-        })
-        binding.memoriesRoot.setOnTouchListener { _, ev ->
-            gesture.onTouchEvent(ev)
-        }
+        binding.memoriesRoot.setOnTouchListener(touchListener)
 
         startSoundtrack()
         showAt(0, animate = false)
-        handler.postDelayed(advance, PHOTO_DURATION_MS)
+        beginTicking()
     }
 
     override fun onDestroy() {
         super.onDestroy()
-        handler.removeCallbacks(advance)
+        handler.removeCallbacksAndMessages(null)
         mediaPlayer?.let {
             try {
                 it.stop()
@@ -121,6 +102,53 @@ class MemoriesActivity : SimpleActivity() {
             }
         }
         mediaPlayer = null
+    }
+
+    private val touchListener = object : View.OnTouchListener {
+        private var downTime = 0L
+        private var downX = 0f
+        private var downY = 0f
+        private var heldRunnable: Runnable? = null
+        private val touchSlop = android.view.ViewConfiguration.get(this@MemoriesActivity).scaledTouchSlop.toFloat()
+        private val longPressMs = 300L
+
+        override fun onTouch(v: View, event: MotionEvent): Boolean {
+            when (event.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    downTime = SystemClock.uptimeMillis()
+                    downX = event.x
+                    downY = event.y
+                    // Long-press style: if user holds for >300ms without
+                    // releasing or moving, pause auto-advance.
+                    heldRunnable = Runnable { pauseAdvance() }
+                    handler.postDelayed(heldRunnable!!, longPressMs)
+                }
+                MotionEvent.ACTION_MOVE -> {
+                    val dx = event.x - downX
+                    val dy = event.y - downY
+                    if (kotlin.math.abs(dx) > touchSlop || kotlin.math.abs(dy) > touchSlop) {
+                        heldRunnable?.let { handler.removeCallbacks(it) }
+                    }
+                }
+                MotionEvent.ACTION_UP -> {
+                    heldRunnable?.let { handler.removeCallbacks(it) }
+                    val held = paused
+                    resumeAdvance()
+                    if (held) return true
+                    val w = v.width
+                    when {
+                        event.x < w * 0.33f -> advance(forward = false)
+                        event.x > w * 0.66f -> advance(forward = true)
+                        else -> { /* central tap = nothing — held already resumed */ }
+                    }
+                }
+                MotionEvent.ACTION_CANCEL -> {
+                    heldRunnable?.let { handler.removeCallbacks(it) }
+                    resumeAdvance()
+                }
+            }
+            return true
+        }
     }
 
     private fun showAt(idx: Int, animate: Boolean) {
@@ -144,6 +172,50 @@ class MemoriesActivity : SimpleActivity() {
         target.animate().alpha(1f).setDuration(CROSSFADE_MS.toLong()).start()
         previous.animate().alpha(0f).setDuration(CROSSFADE_MS.toLong()).start()
         showingA = !showingA
+        binding.memoriesProgress.currentIndex = idx
+        binding.memoriesProgress.currentProgress = 0f
+    }
+
+    private fun advance(forward: Boolean) {
+        if (photos.isEmpty()) return
+        val next = if (forward) index + 1 else index - 1
+        if (next < 0) {
+            // At start; just reset current photo's timer.
+            beginTicking()
+            return
+        }
+        if (next >= photos.size) {
+            // End of story — close.
+            finish()
+            return
+        }
+        index = next
+        showAt(index, animate = true)
+        beginTicking()
+    }
+
+    private fun beginTicking() {
+        handler.removeCallbacks(tickRunnable)
+        elapsedBeforePause = 0L
+        photoStartedAt = SystemClock.uptimeMillis()
+        paused = false
+        handler.postDelayed(tickRunnable, 16L)
+    }
+
+    private fun pauseAdvance() {
+        if (paused) return
+        paused = true
+        elapsedBeforePause += SystemClock.uptimeMillis() - photoStartedAt
+        handler.removeCallbacks(tickRunnable)
+        mediaPlayer?.let { if (it.isPlaying) it.pause() }
+    }
+
+    private fun resumeAdvance() {
+        if (!paused) return
+        paused = false
+        photoStartedAt = SystemClock.uptimeMillis()
+        handler.postDelayed(tickRunnable, 16L)
+        mediaPlayer?.let { if (!it.isPlaying && !muted) it.start() }
     }
 
     private fun startSoundtrack() {
@@ -171,25 +243,12 @@ class MemoriesActivity : SimpleActivity() {
         )
     }
 
-    private fun togglePaused() {
-        paused = !paused
-        if (paused) {
-            handler.removeCallbacks(advance)
-        } else {
-            handler.postDelayed(advance, PHOTO_DURATION_MS)
-        }
-    }
-
-    private fun resetAdvance() {
-        handler.removeCallbacks(advance)
-        if (!paused) handler.postDelayed(advance, PHOTO_DURATION_MS)
-    }
-
     companion object {
         const val EXTRA_PHOTOS = "memories_photos"
         const val EXTRA_TITLE = "memories_title"
         const val EXTRA_SUBTITLE = "memories_subtitle"
         private const val PHOTO_DURATION_MS = 3500L
-        private const val CROSSFADE_MS = 700
+        private const val CROSSFADE_MS = 500
+        private const val MAX_STORY_PHOTOS = 24
     }
 }

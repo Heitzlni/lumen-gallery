@@ -160,6 +160,7 @@ dependencies {
     implementation(libs.mlkit.image.labeling)
     implementation(libs.mlkit.text.recognition)
     implementation(libs.onnxruntime.android)
+    implementation(libs.androidx.media)
     implementation(libs.androidx.media3.exoplayer)
     implementation(libs.androidx.media3.transformer)
     implementation(libs.androidx.media3.ui)
