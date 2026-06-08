@@ -104,12 +104,18 @@ class MemoriesActivity : SimpleActivity() {
         mediaPlayer = null
     }
 
+    // ViewConfiguration.get(this) reads from Resources, which aren't attached
+    // until onCreate's super.onCreate(). Make this lazy so the field
+    // initialiser doesn't crash the activity instantiation itself.
+    private val touchSlop by lazy {
+        android.view.ViewConfiguration.get(this).scaledTouchSlop.toFloat()
+    }
+
     private val touchListener = object : View.OnTouchListener {
         private var downTime = 0L
         private var downX = 0f
         private var downY = 0f
         private var heldRunnable: Runnable? = null
-        private val touchSlop = android.view.ViewConfiguration.get(this@MemoriesActivity).scaledTouchSlop.toFloat()
         private val longPressMs = 300L
 
         override fun onTouch(v: View, event: MotionEvent): Boolean {
@@ -126,7 +132,9 @@ class MemoriesActivity : SimpleActivity() {
                 MotionEvent.ACTION_MOVE -> {
                     val dx = event.x - downX
                     val dy = event.y - downY
-                    if (kotlin.math.abs(dx) > touchSlop || kotlin.math.abs(dy) > touchSlop) {
+                    if (kotlin.math.abs(dx) > this@MemoriesActivity.touchSlop ||
+                        kotlin.math.abs(dy) > this@MemoriesActivity.touchSlop
+                    ) {
                         heldRunnable?.let { handler.removeCallbacks(it) }
                     }
                 }

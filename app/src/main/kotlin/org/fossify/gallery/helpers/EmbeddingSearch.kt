@@ -53,8 +53,13 @@ object EmbeddingSearch {
         } catch (_: Exception) {
             return emptyList()
         }
+        // OpenAI's CLIP zero-shot recipe wraps the query in "a photo of …".
+        // Short bare nouns like "sky" land far from real photos in the
+        // embedding space without it — the model was trained on caption-y
+        // text. The prefix dramatically improves recall.
+        val prompt = if (q.length <= 30 && !q.contains("photo")) "a photo of $q" else q
         val qv = try {
-            encoder.encodeText(q)
+            encoder.encodeText(prompt)
         } catch (_: Exception) {
             return emptyList()
         }
