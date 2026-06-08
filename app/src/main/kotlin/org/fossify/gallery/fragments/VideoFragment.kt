@@ -333,6 +333,20 @@ class VideoFragment : ViewPagerFragment(), TextureView.SurfaceTextureListener,
                             }
                         }
 
+                        val bottomControlsStart = viewHeight * 0.82f
+                        val bottomThirdStart = viewHeight * 0.67f
+                        val inBottomControlsZone = clickedY >= bottomControlsStart
+                        val inBottomThirdSafeZone =
+                            clickedY in bottomThirdStart..bottomControlsStart
+
+                        // Bottom-third (above the actual controls) tap is a
+                        // request to manually dismiss the chrome — don't make
+                        // the user wait the auto-hide timer.
+                        if (!mIsFullscreen && inBottomThirdSafeZone) {
+                            toggleFullscreen()
+                            return true
+                        }
+
                         // Any single tap should reveal the chrome (toolbar /
                         // bottom actions) if it's currently hidden — Google
                         // Photos-style. Calling toggleFullscreen() while in
@@ -342,8 +356,7 @@ class VideoFragment : ViewPagerFragment(), TextureView.SurfaceTextureListener,
                         // Bottom ~18% is a "show controls only" zone — don't
                         // pause when the user taps near the bottom edge, that
                         // was the over-eager pause complaint.
-                        val bottomNoPauseZone = viewHeight * 0.82f
-                        if (clickedY < bottomNoPauseZone) {
+                        if (!inBottomControlsZone) {
                             togglePlayPause()
                         }
                         return true
@@ -475,7 +488,10 @@ class VideoFragment : ViewPagerFragment(), TextureView.SurfaceTextureListener,
         }
 
         setupVideoDuration()
-        if (mStoredRememberLastVideoPosition) {
+        // Read the setting LIVE, not the cached snapshot from onResume —
+        // toggling "Remember last video position" mid-session shouldn't
+        // be ignored until the activity restarts.
+        if (mConfig.rememberLastVideoPosition) {
             restoreLastVideoSavedPosition()
         }
 
@@ -509,7 +525,7 @@ class VideoFragment : ViewPagerFragment(), TextureView.SurfaceTextureListener,
         if (!isInPip) {
             pauseVideo()
         }
-        if (mStoredRememberLastVideoPosition && mIsFragmentVisible && mWasVideoStarted) {
+        if (mConfig.rememberLastVideoPosition && mIsFragmentVisible && mWasVideoStarted) {
             saveVideoProgress()
         }
     }
@@ -884,6 +900,29 @@ class VideoFragment : ViewPagerFragment(), TextureView.SurfaceTextureListener,
             if (forward) curr + FAST_FORWARD_VIDEO_MS else curr - FAST_FORWARD_VIDEO_MS
         newPosition = newPosition.coerceIn(0, maxOf(mExoPlayer!!.duration, 0))
         setPosition(newPosition)
+        showSkipIndicator(forward)
+    }
+
+    private var mSkipHideRunnable: Runnable? = null
+
+    /** YouTube-style "+10s" / "-10s" pill at the centre of the video that
+     *  fades in instantly when a skip fires and fades out 600 ms later. */
+    private fun showSkipIndicator(forward: Boolean) {
+        if (!this::binding.isInitialized) return
+        val view = binding.videoSkipIndicator
+        view.text = if (forward) "+10s" else "-10s"
+        view.visibility = android.view.View.VISIBLE
+        view.animate().cancel()
+        view.alpha = 0f
+        view.animate().alpha(1f).setDuration(120L).start()
+        mSkipHideRunnable?.let { view.removeCallbacks(it) }
+        val hide = Runnable {
+            view.animate().alpha(0f).setDuration(300L).withEndAction {
+                view.visibility = android.view.View.INVISIBLE
+            }.start()
+        }
+        mSkipHideRunnable = hide
+        view.postDelayed(hide, 600L)
     }
 
     override fun onProgressChanged(seekBar: SeekBar, progress: Int, fromUser: Boolean) {
@@ -1003,9 +1042,13 @@ class VideoFragment : ViewPagerFragment(), TextureView.SurfaceTextureListener,
             setPosition(0)
         }
 
-        if (mStoredRememberLastVideoPosition && !mWasLastPositionRestored) {
+        if (mConfig.rememberLastVideoPosition && !mWasLastPositionRestored) {
             mWasLastPositionRestored = true
             restoreLastVideoSavedPosition()
+        } else if (!mConfig.rememberLastVideoPosition) {
+            // Toggle is off — make sure we don't carry a stale mPositionAtPause
+            // from a previous swipe-away into the new player session.
+            mPositionAtPause = 0L
         }
 
         if (!wasEnded || !mConfig.loopVideos) {

@@ -85,6 +85,22 @@
         android:visibility="gone" />
 
     <TextView
+        android:id="@+id/video_skip_indicator"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_centerInParent="true"
+        android:background="@drawable/black_rounded_background"
+        android:paddingHorizontal="@dimen/activity_margin"
+        android:paddingVertical="@dimen/medium_margin"
+        android:textColor="@android:color/white"
+        android:textSize="@dimen/big_text_size"
+        android:textStyle="bold"
+        android:alpha="0"
+        android:visibility="invisible"
+        tools:visibility="visible"
+        tools:text="+10s" />
+
+    <TextView
         android:id="@+id/video_details"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"

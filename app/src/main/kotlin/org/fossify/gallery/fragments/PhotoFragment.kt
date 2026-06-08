@@ -1162,6 +1162,10 @@ class PhotoFragment : ViewPagerFragment() {
     private fun exitLiveText() {
         if (!mLiveTextActive) return
         mLiveTextActive = false
+        if (!this::binding.isInitialized) {
+            mLiveTextForcedFullscreen = false
+            return
+        }
         binding.liveTextOverlay.clear()
         binding.liveTextOverlay.beGone()
         binding.liveTextBar.beGone()
@@ -1191,6 +1195,10 @@ class PhotoFragment : ViewPagerFragment() {
 
     override fun fullscreenToggled(isFullscreen: Boolean) {
         this.mIsFullscreen = isFullscreen
+        // ViewPager can fire fullscreenToggled on a fragment that hasn't run
+        // onCreateView yet (e.g. setPrimaryItem during a fast swipe right
+        // after Live Text exits). Bail before touching binding.
+        if (!this::binding.isInitialized) return
         binding.apply {
             photoDetails.apply {
                 if (mStoredShowExtendedDetails && isVisible() && context != null && resources != null) {

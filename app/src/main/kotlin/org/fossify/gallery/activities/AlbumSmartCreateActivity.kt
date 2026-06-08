@@ -86,16 +86,25 @@ class AlbumSmartCreateActivity : SimpleActivity() {
             toast(R.string.albums_no_query)
             return
         }
-        if (applicationContext.imageEmbeddingDB.count() == 0) {
-            androidx.appcompat.app.AlertDialog.Builder(this)
-                .setMessage(R.string.albums_smart_no_clip_dialog)
-                .setPositiveButton(org.fossify.commons.R.string.ok, null)
-                .show()
-            return
-        }
         hideKeyboard()
         binding.albumSmartStatus.text = getString(R.string.duplicates_scanning)
         ensureBackgroundThread {
+            // DB access has to happen off the main thread or Room aborts.
+            val embeddingCount = try {
+                applicationContext.imageEmbeddingDB.count()
+            } catch (_: Exception) {
+                0
+            }
+            if (embeddingCount == 0) {
+                runOnUiThread {
+                    androidx.appcompat.app.AlertDialog.Builder(this)
+                        .setMessage(R.string.albums_smart_no_clip_dialog)
+                        .setPositiveButton(org.fossify.commons.R.string.ok, null)
+                        .show()
+                    binding.albumSmartStatus.text = ""
+                }
+                return@ensureBackgroundThread
+            }
             val results = EmbeddingSearch.search(applicationContext, query)
                 .filter { File(it).exists() }
             runOnUiThread {
@@ -108,7 +117,6 @@ class AlbumSmartCreateActivity : SimpleActivity() {
                 } else {
                     getString(R.string.albums_match_count, results.size)
                 }
-                // Pre-fill the album name with the query if the user hasn't typed one.
                 if (binding.albumSmartName.text.isNullOrEmpty()) {
                     binding.albumSmartName.setText(query.replaceFirstChar { it.uppercaseChar() })
                 }
