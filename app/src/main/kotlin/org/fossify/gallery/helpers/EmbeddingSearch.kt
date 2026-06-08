@@ -18,8 +18,13 @@ import java.nio.ByteOrder
 object EmbeddingSearch {
 
     private const val DIM = CLIPEncoder.EMBED_DIM
-    private const val SIM_THRESHOLD = 0.20f
-    private const val MAX_RESULTS = 500
+    // CLIP cosine similarities on quantized MobileCLIP-S0 cluster much
+    // lower than full-precision CLIP — typical "actual match" scores end
+    // up in the 0.15-0.30 range rather than 0.25-0.45. 0.20 was too
+    // strict and dropped most real matches; 0.12 keeps obvious noise out
+    // while letting "forest" actually surface forest-y photos.
+    private const val SIM_THRESHOLD = 0.12f
+    private const val MAX_RESULTS = 1000
 
     @Volatile
     private var cachedPaths: Array<String>? = null

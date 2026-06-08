@@ -339,23 +339,20 @@ class VideoFragment : ViewPagerFragment(), TextureView.SurfaceTextureListener,
                         val inBottomThirdSafeZone =
                             clickedY in bottomThirdStart..bottomControlsStart
 
-                        // Bottom-third (above the actual controls) tap is a
-                        // request to manually dismiss the chrome — don't make
-                        // the user wait the auto-hide timer.
-                        if (!mIsFullscreen && inBottomThirdSafeZone) {
+                        // Bottom-third (above the actual controls) is the
+                        // dedicated chrome-toggle zone — never triggers a
+                        // play/pause, just shows or hides the toolbar.
+                        if (inBottomThirdSafeZone) {
                             toggleFullscreen()
                             return true
                         }
 
-                        // Any single tap should reveal the chrome (toolbar /
-                        // bottom actions) if it's currently hidden — Google
-                        // Photos-style. Calling toggleFullscreen() while in
-                        // fullscreen exits fullscreen (shows chrome).
+                        // Any single tap should reveal the chrome if it's
+                        // currently hidden, Google-Photos-style.
                         if (mIsFullscreen) toggleFullscreen()
 
                         // Bottom ~18% is a "show controls only" zone — don't
-                        // pause when the user taps near the bottom edge, that
-                        // was the over-eager pause complaint.
+                        // pause when the user taps near the bottom edge.
                         if (!inBottomControlsZone) {
                             togglePlayPause()
                         }
@@ -541,6 +538,15 @@ class VideoFragment : ViewPagerFragment(), TextureView.SurfaceTextureListener,
         super.setMenuVisibility(menuVisible)
         if (mIsFragmentVisible && !menuVisible) {
             pauseVideo()
+            // Swiping AWAY from this video. If the user has "Remember last
+            // video position" disabled, wipe the in-memory pause point so a
+            // later swipe back doesn't seek to where we left off. Without
+            // this the cached fragment's pauseVideo() set mPositionAtPause,
+            // and the next playVideo() seeked to it regardless of the toggle.
+            if (this::mConfig.isInitialized && !mConfig.rememberLastVideoPosition) {
+                mPositionAtPause = 0L
+                mWasLastPositionRestored = false
+            }
         }
 
         mIsFragmentVisible = menuVisible

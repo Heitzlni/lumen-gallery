@@ -1,6 +1,5 @@
 package org.fossify.gallery.activities
 
-import android.content.Intent
 import android.os.Bundle
 import org.fossify.commons.dialogs.ConfirmationDialog
 import org.fossify.commons.extensions.beVisibleIf
@@ -12,8 +11,6 @@ import org.fossify.gallery.R
 import org.fossify.gallery.adapters.AlbumPhotosAdapter
 import org.fossify.gallery.databinding.ActivityAlbumDetailBinding
 import org.fossify.gallery.extensions.albumDB
-import org.fossify.gallery.helpers.PATH
-import org.fossify.gallery.helpers.SKIP_AUTHENTICATION
 import java.io.File
 
 /**
@@ -122,12 +119,28 @@ class AlbumDetailActivity : SimpleActivity() {
         }
     }
 
+    /**
+     * Open the tapped photo full-screen in a quick Glide dialog. Routing
+     * through ViewPagerActivity here was opening the wrong file because
+     * VPA reuses MediaActivity.mMedia as its media list, and album items
+     * usually live outside whatever album was last loaded. A simple
+     * dismiss-on-tap dialog avoids that whole tangle for now; a proper
+     * swipe-through-album viewer is a future polish step.
+     */
     private fun openInViewer(path: String) {
-        Intent(this, ViewPagerActivity::class.java).apply {
-            putExtra(PATH, path)
-            putExtra(SKIP_AUTHENTICATION, true)
-            startActivity(this)
+        val dialog = android.app.Dialog(
+            this, android.R.style.Theme_Black_NoTitleBar_Fullscreen
+        )
+        val iv = android.widget.ImageView(this).apply {
+            scaleType = android.widget.ImageView.ScaleType.FIT_CENTER
+            setBackgroundColor(android.graphics.Color.BLACK)
+            setOnClickListener { dialog.dismiss() }
         }
+        com.bumptech.glide.Glide.with(this)
+            .load(path)
+            .into(iv)
+        dialog.setContentView(iv)
+        dialog.show()
     }
 
     companion object {
