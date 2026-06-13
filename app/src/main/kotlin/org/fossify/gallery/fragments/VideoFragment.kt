@@ -702,6 +702,11 @@ class VideoFragment : ViewPagerFragment(), TextureView.SurfaceTextureListener,
                         .build(),
                     /* handleAudioFocus = */ true,
                 )
+                // Pause when audio output abruptly changes — yanking AirPods,
+                // unplugging wired headphones, Bluetooth car kit disconnecting
+                // mid-drive. Standard Android contract via
+                // AUDIO_BECOMING_NOISY; ExoPlayer registers the receiver for us.
+                setHandleAudioBecomingNoisy(true)
                 prepare()
 
                 if (mTextureView.surfaceTexture != null) {
