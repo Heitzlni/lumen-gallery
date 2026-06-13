@@ -24,6 +24,7 @@ import org.fossify.gallery.databinding.ActivityVideoTrimBinding
 import org.fossify.gallery.helpers.PATH
 import java.io.File
 import java.io.FileInputStream
+import java.io.FileOutputStream
 import java.util.Locale
 
 @UnstableApi
@@ -210,13 +211,28 @@ class VideoTrimActivity : SimpleActivity() {
         val rawSourceDate = extractSourceDateMs(sourcePath)
         val sourceDate = if (rawSourceDate > 0L) rawSourceDate + 1000L else 0L
 
+        // Drop the trimmed copy next to the source so it shows up in the
+        // same folder the user opened it from. Falling back to
+        // Movies/FossifyGallery only when the source isn't reachable from
+        // a writable directory or sits outside the standard media roots
+        // (Q+ MediaStore.RELATIVE_PATH only accepts DCIM / Movies /
+        // Pictures roots for Video.Media inserts).
+        val sourceParentFile = File(sourcePath).parentFile
+        val sourceParent = sourceParentFile?.absolutePath
+
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+            publishViaDirectWrite(tempFile, sourceParentFile, outName, sourceDate)
+            return
+        }
+
+        val relativePath = sourceParent?.let { computeRelativePath(it) }
+            ?: "Movies/FossifyGallery/"
+
         val values = ContentValues().apply {
             put(MediaStore.Video.Media.DISPLAY_NAME, outName)
             put(MediaStore.Video.Media.MIME_TYPE, "video/mp4")
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                put(MediaStore.Video.Media.RELATIVE_PATH, "Movies/FossifyGallery")
-                put(MediaStore.Video.Media.IS_PENDING, 1)
-            }
+            put(MediaStore.Video.Media.RELATIVE_PATH, relativePath)
+            put(MediaStore.Video.Media.IS_PENDING, 1)
             if (sourceDate > 0L) {
                 put(MediaStore.MediaColumns.DATE_TAKEN, sourceDate)
                 put(MediaStore.MediaColumns.DATE_MODIFIED, sourceDate / 1000L)
@@ -225,12 +241,7 @@ class VideoTrimActivity : SimpleActivity() {
         }
 
         val resolver = contentResolver
-        val collection = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            MediaStore.Video.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
-        } else {
-            @Suppress("DEPRECATION")
-            MediaStore.Video.Media.EXTERNAL_CONTENT_URI
-        }
+        val collection = MediaStore.Video.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
 
         val uri: Uri? = try {
             resolver.insert(collection, values)
@@ -239,8 +250,10 @@ class VideoTrimActivity : SimpleActivity() {
         }
 
         if (uri == null) {
-            handleTrimError("could not create output")
-            tempFile.delete()
+            // The targeted folder rejected the insert (e.g. source lived
+            // under Download/ or another non-media root). Fall back to the
+            // bundled FossifyGallery folder so the trim is still saved.
+            publishToFallbackFolder(tempFile, outName, sourceDate)
             return
         }
 
@@ -250,12 +263,10 @@ class VideoTrimActivity : SimpleActivity() {
                     input.copyTo(out)
                 }
             }
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                val finalValues = ContentValues().apply {
-                    put(MediaStore.Video.Media.IS_PENDING, 0)
-                }
-                resolver.update(uri, finalValues, null, null)
+            val finalValues = ContentValues().apply {
+                put(MediaStore.Video.Media.IS_PENDING, 0)
             }
+            resolver.update(uri, finalValues, null, null)
 
             // Same belt-and-suspenders the vault restore uses: force the
             // filesystem mtime so apps that rank by file time match those
@@ -309,6 +320,104 @@ class VideoTrimActivity : SimpleActivity() {
                 resolver.delete(uri, null, null)
             } catch (_: Exception) {
             }
+            handleTrimError(e.message ?: "could not write output")
+            tempFile.delete()
+        }
+    }
+
+    /**
+     * Resolves an absolute parent directory to a MediaStore RELATIVE_PATH
+     * (e.g. "/storage/emulated/0/DCIM/Camera" -> "DCIM/Camera/"). Returns
+     * null when the directory isn't under primary external storage or
+     * doesn't start with a Video.Media-accepted root (DCIM/Movies/Pictures).
+     */
+    private fun computeRelativePath(absoluteParent: String): String? {
+        val externalRoot = android.os.Environment.getExternalStorageDirectory().absolutePath
+        if (!absoluteParent.startsWith("$externalRoot/")) return null
+        val rel = absoluteParent.substring(externalRoot.length + 1)
+        val top = rel.substringBefore('/')
+        if (top !in setOf("DCIM", "Movies", "Pictures")) return null
+        return if (rel.endsWith('/')) rel else "$rel/"
+    }
+
+    private fun publishToFallbackFolder(tempFile: File, outName: String, sourceDate: Long) {
+        val values = ContentValues().apply {
+            put(MediaStore.Video.Media.DISPLAY_NAME, outName)
+            put(MediaStore.Video.Media.MIME_TYPE, "video/mp4")
+            put(MediaStore.Video.Media.RELATIVE_PATH, "Movies/FossifyGallery/")
+            put(MediaStore.Video.Media.IS_PENDING, 1)
+            if (sourceDate > 0L) {
+                put(MediaStore.MediaColumns.DATE_TAKEN, sourceDate)
+                put(MediaStore.MediaColumns.DATE_MODIFIED, sourceDate / 1000L)
+                put(MediaStore.MediaColumns.DATE_ADDED, sourceDate / 1000L)
+            }
+        }
+        val resolver = contentResolver
+        val collection = MediaStore.Video.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
+        val uri = try {
+            resolver.insert(collection, values)
+        } catch (_: Exception) {
+            null
+        }
+        if (uri == null) {
+            handleTrimError("could not create output")
+            tempFile.delete()
+            return
+        }
+        try {
+            resolver.openOutputStream(uri)?.use { out ->
+                FileInputStream(tempFile).use { input -> input.copyTo(out) }
+            }
+            val finalValues = ContentValues().apply {
+                put(MediaStore.Video.Media.IS_PENDING, 0)
+            }
+            resolver.update(uri, finalValues, null, null)
+            tempFile.delete()
+            isExporting = false
+            runOnUiThread {
+                binding.videoTrimProgressOverlay.beGone()
+                toast(getString(R.string.trim_saved_as, outName))
+                finish()
+            }
+        } catch (e: Exception) {
+            try { resolver.delete(uri, null, null) } catch (_: Exception) {}
+            handleTrimError(e.message ?: "could not write output")
+            tempFile.delete()
+        }
+    }
+
+    /**
+     * Pre-Q path: MediaStore.RELATIVE_PATH is ignored; the file system is
+     * the source of truth. Copy the temp file next to the source and let
+     * MediaScanner pick it up.
+     */
+    private fun publishViaDirectWrite(
+        tempFile: File,
+        sourceParent: File?,
+        outName: String,
+        sourceDate: Long,
+    ) {
+        val targetDir = sourceParent
+            ?: File(android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_MOVIES), "FossifyGallery")
+        if (!targetDir.exists()) targetDir.mkdirs()
+        val outFile = File(targetDir, outName)
+        try {
+            FileInputStream(tempFile).use { input ->
+                FileOutputStream(outFile).use { out -> input.copyTo(out) }
+            }
+            if (sourceDate > 0L) outFile.setLastModified(sourceDate)
+            android.media.MediaScannerConnection.scanFile(
+                applicationContext, arrayOf(outFile.absolutePath), null, null
+            )
+            tempFile.delete()
+            isExporting = false
+            runOnUiThread {
+                binding.videoTrimProgressOverlay.beGone()
+                toast(getString(R.string.trim_saved_as, outName))
+                finish()
+            }
+        } catch (e: Exception) {
+            try { outFile.delete() } catch (_: Exception) {}
             handleTrimError(e.message ?: "could not write output")
             tempFile.delete()
         }

@@ -117,7 +117,12 @@ android {
         )
     }
 
-    namespace = project.property("APP_ID").toString()
+    // Fork note: applicationId (com.heitzler.lumen) is decoupled from the
+    // Kotlin/Java namespace (org.fossify.gallery). The applicationId is the
+    // user-facing install slot; keeping the namespace matches every
+    // `import org.fossify.gallery.R` already in the codebase and avoids a
+    // mass package rename across hundreds of files.
+    namespace = "org.fossify.gallery"
 
     lint {
         checkReleaseBuilds = false
