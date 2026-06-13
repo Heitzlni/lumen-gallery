@@ -334,15 +334,15 @@ class VideoFragment : ViewPagerFragment(), TextureView.SurfaceTextureListener,
                         }
 
                         val bottomControlsStart = viewHeight * 0.82f
-                        val bottomThirdStart = viewHeight * 0.67f
+                        val chromeToggleStart = viewHeight * 0.75f
                         val inBottomControlsZone = clickedY >= bottomControlsStart
-                        val inBottomThirdSafeZone =
-                            clickedY in bottomThirdStart..bottomControlsStart
+                        val inChromeToggleZone =
+                            clickedY in chromeToggleStart..bottomControlsStart
 
-                        // Bottom-third (above the actual controls) is the
-                        // dedicated chrome-toggle zone — never triggers a
+                        // A narrow strip just above the bottom controls is
+                        // the dedicated chrome-toggle zone — never triggers
                         // play/pause, just shows or hides the toolbar.
-                        if (inBottomThirdSafeZone) {
+                        if (inChromeToggleZone) {
                             toggleFullscreen()
                             return true
                         }

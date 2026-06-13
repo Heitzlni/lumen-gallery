@@ -1,39 +1,62 @@
-# Fossify Gallery
+# Lumen Gallery
 
-<img alt="Logo" src="graphics/icon.webp" width="120" />
+A privacy-first Android gallery, forked from [Fossify Gallery](https://github.com/FossifyOrg/Gallery) and extended with on-device intelligence — semantic search, OCR / Live Text, story-style memories, encrypted vault, and more. Everything runs locally; no cloud, no Google Play Services dependency at runtime, no telemetry.
 
-<a href='https://play.google.com/store/apps/details?id=org.fossify.gallery'><img alt='Get it on Google Play' src='https://play.google.com/intl/en_us/badges/static/images/badges/en_badge_web_generic.png' height=80/></a> <a href="https://f-droid.org/en/packages/org.fossify.gallery/"><img src="https://fdroid.gitlab.io/artwork/badge/get-it-on-en.svg" alt="Get it on F-Droid" height=80/></a> <a href="https://apt.izzysoft.de/fdroid/index/apk/org.fossify.gallery"><img src="https://gitlab.com/IzzyOnDroid/repo/-/raw/master/assets/IzzyOnDroid.png" alt="Get it on IzzyOnDroid" height=80/></a>
+Installs side-by-side with the original Fossify Gallery (different `applicationId` — `com.heitzler.lumen`).
 
-Unleash memories, not personal data. Fossify Gallery is the ultimate photo and video app that's as powerful as it is private. No ads, no unnecessary permissions – just a seamless experience tailored for you.
+## What's in Lumen on top of upstream Fossify
 
-**🖼️ PHOTO EDITING AT YOUR FINGERTIPS:**  
-Enhance your photos with our basic yet powerful photo editor. Crop, resize, rotate, flip, draw, and apply stunning filters, all without compromising your privacy. Take control of your memories like never before.
+**On-device understanding**
+- **Semantic search** — type "forest hike" or "my dog on the couch" and the gallery finds matching photos. Uses [MobileCLIP-S0](https://github.com/apple/ml-mobileclip) (Apple, MIT) running fully offline via ONNX Runtime.
+- **OCR text search** — every photo with text is indexed; search by what's written in the picture. Powered by ML Kit Text Recognition (bundled offline model).
+- **Image content labels** — auto-tagged subjects from ML Kit Image Labeling.
+- **Live Text overlay** — Apple-style "select text in a photo" mode.
 
-**🌐 PRIVACY FIRST, ALWAYS:**  
-Your privacy matters. Ditch the data-hungry giants. Fossify Gallery puts you in control. Strip away EXIF metadata like GPS coordinates and camera details, keeping your memories yours, and yours alone.
+**Vault**
+- AES-256-GCM encrypted file vault keyed by the Android hardware Keystore (never extractable).
+- Locked-folder migration from Google Photos via snapshot-diff.
 
-**🔒 SUPERIOR SECURITY:**  
-Lock down your memories with pin, pattern, or fingerprint protection. Secure specific photos, videos, or the entire app – you decide who gets access. Peace of mind, guaranteed.
+**Video player**
+- Picture-in-Picture with prev / play-pause / next remote actions.
+- MediaSession for Bluetooth / AirPods / lock-screen controls.
+- Audio focus + auto-pause when headphones disconnect (`AUDIO_BECOMING_NOISY`).
+- ±10s skip indicator, smoother scrub with thumbnail preview, persistent playback queue.
+- Video trim that writes the result back to the source folder (not a hidden bucket).
+- Audio extraction (Media3 Transformer) — strip the audio track from a video to `.m4a`.
 
-**🔄 RECOVER WITH EASE:**  
-Breathe easy, accidents happen! Fossify Gallery's built-in recycle bin lets you recover deleted photos and videos in seconds. No more lost treasures, just pure relief.
+**Albums and memories**
+- **Virtual albums** with many-to-many membership and CLIP-powered smart-add ("add more sky photos to this album").
+- **Story-style memories** — Instagram-style segmented progress, CLIP clustering of past-on-this-day photos with auto-inferred activity labels.
 
-**🎨 YOUR GALLERY, YOUR STYLE:**  
-Customize the look, feel, and functionality to match your style. From UI themes to function buttons, Fossify Gallery gives you the creative freedom you crave.
+**Editor**
+- Drawing, text overlay, lasso selection, rotation, full undo/redo.
+- Perceptual aHash duplicate detector with grouped review.
 
-**📷 UNIVERSAL FORMAT FREEDOM:**  
-JPEG, JPEG XL, PNG, MP4, MKV, RAW, SVG, GIF, AVIF, videos, and more – we've got your memories covered, in any format you choose. No restrictions, just limitless possibilities.
+## Privacy & freedom
 
-**✨ MATERIAL DESIGN WITH DYNAMIC THEMES:**  
-Experience the beauty of intuitive material design with dynamic themes. Want more? Dive into custom themes and make your gallery truly unique.
+- Fully on-device. No network calls at runtime. No Google Play Services.
+- Bundled ML models — CLIP (~54 MB) and ML Kit text recognition are shipped inside the APK.
+- GPL-3.0 — see [LICENSE](LICENSE). All source remains open.
 
-➡️ Explore more Fossify apps: https://www.fossify.org<br>
-➡️ Open-Source Code: https://www.github.com/FossifyOrg<br>
-➡️ Join the community on Reddit: https://www.reddit.com/r/Fossify<br>
-➡️ Connect on Telegram: https://t.me/Fossify
+## Install
 
-<div align="center">
-<img alt="App image" src="fastlane/metadata/android/en-US/images/phoneScreenshots/1_en-US.png" width="30%">
-<img alt="App image" src="fastlane/metadata/android/en-US/images/phoneScreenshots/2_en-US.png" width="30%">
-<img alt="App image" src="fastlane/metadata/android/en-US/images/phoneScreenshots/3_en-US.png" width="30%">
-</div>
+Download the latest signed APK from [Releases](../../releases). For automatic updates, point [Obtainium](https://github.com/ImranR98/Obtainium) at this repo.
+
+> APK is large (~80–120 MB per ABI) because the CLIP weights and ONNX Runtime native libs are bundled. There is no way around this without giving up the offline guarantee.
+
+## Build
+
+```bash
+source env.sh           # exports JAVA_HOME + Android SDK paths
+./gradlew assembleFossRelease
+```
+
+## Attribution
+
+This project is a fork of [Fossify Gallery](https://github.com/FossifyOrg/Gallery), itself a fork of Simple Mobile Tools Gallery. All upstream copyright notices are preserved per GPL-3.0. The Lumen-specific changes — on-device ML, vault, memories, virtual albums, the rewritten video player, the editor extensions — are the work of [@Heitzlni](https://github.com/Heitzlni) and contributors.
+
+Translations come straight from the Fossify Weblate project and remain credited there.
+
+## License
+
+GPL-3.0-or-later, inherited from upstream. See [LICENSE](LICENSE).
