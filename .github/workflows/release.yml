@@ -68,7 +68,9 @@ jobs:
             exit 1
           }
           KEYSTORE_SIZE=$(stat -c%s "$RUNNER_TEMP/release.keystore")
+          KEYSTORE_SHA=$(sha256sum "$RUNNER_TEMP/release.keystore" | head -c 64)
           echo "Decoded keystore size: $KEYSTORE_SIZE bytes"
+          echo "Decoded keystore sha256: $KEYSTORE_SHA"
           if [ "$KEYSTORE_SIZE" -lt 1000 ]; then
             echo "::error::keystore decoded to <1KB ($KEYSTORE_SIZE bytes) -- paste likely truncated"
             exit 1
