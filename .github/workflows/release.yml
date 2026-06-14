@@ -83,6 +83,36 @@ jobs:
           esac
           echo "SIGNING_STORE_FILE=$RUNNER_TEMP/release.keystore" >> "$GITHUB_ENV"
 
+      - name: Verify signing credentials before build
+        env:
+          SIGNING_STORE_PASSWORD: ${{ secrets.SIGNING_STORE_PASSWORD }}
+          SIGNING_KEY_ALIAS: ${{ secrets.SIGNING_KEY_ALIAS }}
+          SIGNING_KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD }}
+        run: |
+          # Print length + first 8 hex of SHA-256 for each value. The
+          # password itself is NOT printed -- prefix-of-hash is a one-way
+          # fingerprint the user can re-compute locally to confirm CI is
+          # seeing the same value they pasted.
+          for name in SIGNING_STORE_PASSWORD SIGNING_KEY_PASSWORD SIGNING_KEY_ALIAS; do
+            val="${!name}"
+            len=${#val}
+            hash_prefix=$(printf '%s' "$val" | sha256sum | head -c 12)
+            # Detect trailing whitespace/newline that would cause a silent mismatch.
+            trimmed=$(printf '%s' "$val" | tr -d '[:space:]')
+            tlen=${#trimmed}
+            extra=""
+            [ "$tlen" -ne "$len" ] && extra=" -- WARNING: has whitespace, trimmed length = $tlen"
+            echo "$name: length=$len, sha256 prefix=$hash_prefix$extra"
+          done
+          # Java keystore alias matching is case-insensitive on PKCS#12
+          # but exact on JKS -- verify the alias against the keystore so
+          # we error early if the wrong one was set.
+          ${JAVA_HOME}/bin/keytool -list -v -keystore "$SIGNING_STORE_FILE" \
+            -storepass "$SIGNING_STORE_PASSWORD" 2>&1 \
+            | head -30 \
+            | grep -E "(Keystore type|Your keystore contains|Alias name|Entry type)" \
+            || { echo "::error::keytool failed -- SIGNING_STORE_PASSWORD does not unlock the keystore"; exit 1; }
+
       - name: Build foss release APK
         env:
           SIGNING_STORE_PASSWORD: ${{ secrets.SIGNING_STORE_PASSWORD }}
