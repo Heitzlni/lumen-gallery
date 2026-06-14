@@ -51,16 +51,36 @@ jobs:
           if [ -z "$SIGNING_KEY_BASE64" ]; then
             echo "::error::SIGNING_KEY_BASE64 secret is not set"; exit 1
           fi
-          # tr strips any whitespace / newlines that crept in when the
-          # base64 was pasted into the secret (GitHub's secret UI does
-          # not normalise these, so a multi-line `base64` output without
-          # -w0 would fail decode here).
-          echo "$SIGNING_KEY_BASE64" | tr -d '[:space:]' | base64 -d > "$RUNNER_TEMP/release.keystore"
+          # Strip everything that isn't a valid base64 character before
+          # decoding. Handles whitespace / newlines from a multi-line paste,
+          # BOMs from text editors, smart quotes from web-paste, partial
+          # CR/LF, etc. -- anything `base64 -d` would reject.
+          RAW_LEN=${#SIGNING_KEY_BASE64}
+          CLEAN=$(printf '%s' "$SIGNING_KEY_BASE64" | LC_ALL=C tr -dc 'A-Za-z0-9+/=')
+          CLEAN_LEN=${#CLEAN}
+          echo "Secret length: raw=$RAW_LEN, after sanitisation=$CLEAN_LEN"
+          if [ "$CLEAN_LEN" -lt 100 ]; then
+            echo "::error::sanitised base64 is too short ($CLEAN_LEN chars) -- the secret value doesn't look like a keystore"
+            exit 1
+          fi
+          printf '%s' "$CLEAN" | base64 -d > "$RUNNER_TEMP/release.keystore" || {
+            echo "::error::base64 decode failed even after sanitisation"
+            exit 1
+          }
           KEYSTORE_SIZE=$(stat -c%s "$RUNNER_TEMP/release.keystore")
           echo "Decoded keystore size: $KEYSTORE_SIZE bytes"
           if [ "$KEYSTORE_SIZE" -lt 1000 ]; then
-            echo "::error::keystore decoded to <1KB — base64 looks truncated"; exit 1
+            echo "::error::keystore decoded to <1KB ($KEYSTORE_SIZE bytes) -- paste likely truncated"
+            exit 1
           fi
+          # Cheap sanity check: real Java keystores start with magic bytes
+          # 0xFEEDFEED (.jks) or DER 0x30 0x82 (.p12 / PKCS#12).
+          MAGIC=$(head -c 4 "$RUNNER_TEMP/release.keystore" | xxd -p | head -c 8)
+          echo "Keystore magic: $MAGIC"
+          case "$MAGIC" in
+            feedfeed|3082*) echo "Magic OK." ;;
+            *) echo "::warning::keystore magic bytes ($MAGIC) don't match JKS or PKCS#12 -- decode may have produced gibberish";;
+          esac
           echo "SIGNING_STORE_FILE=$RUNNER_TEMP/release.keystore" >> "$GITHUB_ENV"
 
       - name: Build foss release APK
