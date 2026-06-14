@@ -51,7 +51,16 @@ jobs:
           if [ -z "$SIGNING_KEY_BASE64" ]; then
             echo "::error::SIGNING_KEY_BASE64 secret is not set"; exit 1
           fi
-          echo "$SIGNING_KEY_BASE64" | base64 -d > "$RUNNER_TEMP/release.keystore"
+          # tr strips any whitespace / newlines that crept in when the
+          # base64 was pasted into the secret (GitHub's secret UI does
+          # not normalise these, so a multi-line `base64` output without
+          # -w0 would fail decode here).
+          echo "$SIGNING_KEY_BASE64" | tr -d '[:space:]' | base64 -d > "$RUNNER_TEMP/release.keystore"
+          KEYSTORE_SIZE=$(stat -c%s "$RUNNER_TEMP/release.keystore")
+          echo "Decoded keystore size: $KEYSTORE_SIZE bytes"
+          if [ "$KEYSTORE_SIZE" -lt 1000 ]; then
+            echo "::error::keystore decoded to <1KB — base64 looks truncated"; exit 1
+          fi
           echo "SIGNING_STORE_FILE=$RUNNER_TEMP/release.keystore" >> "$GITHUB_ENV"
 
       - name: Build foss release APK
