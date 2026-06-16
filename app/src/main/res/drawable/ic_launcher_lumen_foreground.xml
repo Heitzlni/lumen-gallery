@@ -5,10 +5,10 @@
     android:viewportHeight="512">
     <!-- 8-point sunburst star ("lumen" = light) -->
     <path
-        android:fillColor="#FFFFFFFF"
+        android:fillColor="#FF9D4EDD"
         android:pathData="M426,256 L334,289 L376,376 L289,334 L256,426 L223,334 L136,376 L178,289 L86,256 L178,223 L136,136 L223,178 L256,86 L289,178 L376,136 L334,223 Z" />
     <!-- Central disc -->
     <path
-        android:fillColor="#FFFFFFFF"
+        android:fillColor="#FF9D4EDD"
         android:pathData="M256,256 m-32,0 a32,32 0 1,0 64,0 a32,32 0 1,0 -64,0 Z" />
 </vector>
