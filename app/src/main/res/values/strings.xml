@@ -302,6 +302,8 @@
     <!-- Video player scrub -->
     <string name="scrub_speed_label">%1$.2fx scrub</string>
     <string name="picture_in_picture">Picture-in-Picture for videos</string>
+    <!-- Launcher icon swap -->
+    <string name="use_fossify_classic_icon">Use original Fossify icon</string>
     <!-- Scrub thumbnail prefetch -->
     <string name="prefetch_scrub_thumbnails">Pre-cache video scrub previews</string>
     <string name="prefetch_scrub_cache_now">Cache scrub previews now</string>

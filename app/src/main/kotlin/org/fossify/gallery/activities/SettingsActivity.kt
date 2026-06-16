@@ -78,6 +78,7 @@ class SettingsActivity : SimpleActivity() {
         setupRememberLastVideo()
         setupLoopVideos()
         setupPictureInPicture()
+        setupUseFossifyClassicIcon()
         setupPrefetchScrub()
         setupScrubCacheNow()
         setupClearScrubCache()
@@ -775,6 +776,44 @@ class SettingsActivity : SimpleActivity() {
         binding.settingsPictureInPictureHolder.setOnClickListener {
             binding.settingsPictureInPicture.toggle()
             config.enablePictureInPicture = binding.settingsPictureInPicture.isChecked
+        }
+    }
+
+    /**
+     * Swap between the Lumen launcher icon and the original Fossify green icon.
+     * The launcher entries are managed as activity-aliases; we enable/disable
+     * them via PackageManager and also reach into the colour aliases so a stale
+     * picker choice doesn't leave a duplicate icon behind.
+     */
+    private fun setupUseFossifyClassicIcon() {
+        binding.settingsUseFossifyClassicIcon.isChecked = config.useFossifyClassicIcon
+        binding.settingsUseFossifyClassicIconHolder.setOnClickListener {
+            binding.settingsUseFossifyClassicIcon.toggle()
+            val useFossify = binding.settingsUseFossifyClassicIcon.isChecked
+            config.useFossifyClassicIcon = useFossify
+            applyLauncherIconChoice(useFossify)
+        }
+    }
+
+    private fun applyLauncherIconChoice(useFossify: Boolean) {
+        val pm = packageManager
+        val pkg = packageName
+        val lumenComponent = android.content.ComponentName(pkg, "org.fossify.gallery.activities.SplashActivity.Lumen")
+        val greenComponent = android.content.ComponentName(pkg, "org.fossify.gallery.activities.SplashActivity.Green")
+        try {
+            pm.setComponentEnabledSetting(
+                lumenComponent,
+                if (useFossify) android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_DISABLED
+                else android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_ENABLED,
+                android.content.pm.PackageManager.DONT_KILL_APP,
+            )
+            pm.setComponentEnabledSetting(
+                greenComponent,
+                if (useFossify) android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_ENABLED
+                else android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
+                android.content.pm.PackageManager.DONT_KILL_APP,
+            )
+        } catch (_: Exception) {
         }
     }
 

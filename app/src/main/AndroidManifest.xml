@@ -45,10 +45,10 @@
         android:name="org.fossify.gallery.App"
         android:allowBackup="true"
         android:appCategory="image"
-        android:icon="@mipmap/ic_launcher"
+        android:icon="@mipmap/ic_launcher_lumen"
         android:label="@string/app_launcher_name"
         android:requestLegacyExternalStorage="true"
-        android:roundIcon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_lumen"
         android:supportsRtl="true"
         android:theme="@style/AppTheme"
         tools:replace="android:label">
@@ -521,8 +521,22 @@
         </activity-alias>
 
         <activity-alias
-            android:name=".activities.SplashActivity.Green"
+            android:name=".activities.SplashActivity.Lumen"
             android:enabled="true"
+            android:exported="true"
+            android:icon="@mipmap/ic_launcher_lumen"
+            android:roundIcon="@mipmap/ic_launcher_lumen"
+            android:targetActivity=".activities.SplashActivity">
+
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+
+        <activity-alias
+            android:name=".activities.SplashActivity.Green"
+            android:enabled="false"
             android:exported="true"
             android:icon="@mipmap/ic_launcher"
             android:roundIcon="@mipmap/ic_launcher"

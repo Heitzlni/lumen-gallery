@@ -615,6 +615,10 @@ class Config(context: Context) : BaseConfig(context) {
         get() = prefs.getBoolean(ENABLE_PIP, true)
         set(value) = prefs.edit().putBoolean(ENABLE_PIP, value).apply()
 
+    var useFossifyClassicIcon: Boolean
+        get() = prefs.getBoolean(USE_FOSSIFY_CLASSIC_ICON, false)
+        set(value) = prefs.edit().putBoolean(USE_FOSSIFY_CLASSIC_ICON, value).apply()
+
     var prefetchScrubThumbnails: Boolean
         get() = prefs.getBoolean(PREFETCH_SCRUB_THUMBS, false)
         set(value) = prefs.edit().putBoolean(PREFETCH_SCRUB_THUMBS, value).apply()
@@ -692,6 +696,7 @@ class Config(context: Context) : BaseConfig(context) {
 private const val VAULT_PROTECTION_HASH = "vault_protection_hash"
 private const val VAULT_PROTECTION_TYPE = "vault_protection_type"
 private const val ENABLE_PIP = "enable_picture_in_picture"
+private const val USE_FOSSIFY_CLASSIC_ICON = "use_fossify_classic_icon"
 private const val PREFETCH_SCRUB_THUMBS = "prefetch_scrub_thumbnails"
 private const val AUTO_INDEX_LABELS = "auto_index_labels"
 private const val AUTO_INDEX_OCR = "auto_index_ocr"
