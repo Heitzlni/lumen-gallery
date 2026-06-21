@@ -334,15 +334,50 @@ class VideoFragment : ViewPagerFragment(), TextureView.SurfaceTextureListener,
                         }
 
                         val bottomControlsStart = viewHeight * 0.82f
-                        val chromeToggleStart = viewHeight * 0.75f
                         val inBottomControlsZone = clickedY >= bottomControlsStart
-                        val inChromeToggleZone =
-                            clickedY in chromeToggleStart..bottomControlsStart
 
-                        // A narrow strip just above the bottom controls is
-                        // the dedicated chrome-toggle zone — never triggers
-                        // play/pause, just shows or hides the toolbar.
-                        if (inChromeToggleZone) {
+                        // Compute the actual rendered video rectangle inside
+                        // the container. ExoPlayer aspect-fits the video, so
+                        // when the video aspect differs from the container
+                        // aspect there's letterbox/pillarbox space around it.
+                        // Tapping that empty space should reveal the chrome
+                        // without pausing playback — only taps that hit the
+                        // video pixels themselves toggle play/pause.
+                        //
+                        // For videos that fill the screen (e.g. 9:16 portrait
+                        // on a portrait phone), there's no letterbox; the
+                        // bottom ~6% strip is reserved as a fixed chrome-only
+                        // zone so users still have somewhere to tap that
+                        // doesn't pause.
+                        val videoW = mVideoSize.x
+                        val videoH = mVideoSize.y
+                        val outsideVideoPixels = if (videoW > 0 && videoH > 0) {
+                            val videoAspect = videoW.toFloat() / videoH
+                            val viewAspect = viewWidth.toFloat() / viewHeight
+                            val renderedW: Float
+                            val renderedH: Float
+                            if (videoAspect > viewAspect) {
+                                renderedW = viewWidth.toFloat()
+                                renderedH = viewWidth / videoAspect
+                            } else {
+                                renderedH = viewHeight.toFloat()
+                                renderedW = viewHeight * videoAspect
+                            }
+                            val left = (viewWidth - renderedW) / 2f
+                            val top = (viewHeight - renderedH) / 2f
+                            val right = left + renderedW
+                            val bottom = top + renderedH
+                            clickedX < left || clickedX > right ||
+                                clickedY < top || clickedY > bottom
+                        } else false
+
+                        val fallbackChromeStart = viewHeight * 0.94f
+                        val inFallbackChromeStrip =
+                            clickedY in fallbackChromeStart..bottomControlsStart
+
+                        // Either letterbox/pillarbox tap, or the fixed bottom
+                        // strip for full-screen videos: show chrome only.
+                        if (outsideVideoPixels || inFallbackChromeStrip) {
                             toggleFullscreen()
                             return true
                         }
@@ -351,8 +386,8 @@ class VideoFragment : ViewPagerFragment(), TextureView.SurfaceTextureListener,
                         // currently hidden, Google-Photos-style.
                         if (mIsFullscreen) toggleFullscreen()
 
-                        // Bottom ~18% is a "show controls only" zone — don't
-                        // pause when the user taps near the bottom edge.
+                        // Bottom ~18% is the actual playback controls — don't
+                        // pause when the user taps the seekbar / buttons.
                         if (!inBottomControlsZone) {
                             togglePlayPause()
                         }
