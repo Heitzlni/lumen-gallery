@@ -328,15 +328,20 @@ class VideoTrimActivity : SimpleActivity() {
     /**
      * Resolves an absolute parent directory to a MediaStore RELATIVE_PATH
      * (e.g. "/storage/emulated/0/DCIM/Camera" -> "DCIM/Camera/"). Returns
-     * null when the directory isn't under primary external storage or
-     * doesn't start with a Video.Media-accepted root (DCIM/Movies/Pictures).
+     * null when the directory isn't under primary external storage.
+     *
+     * We don't whitelist top-level dirs anymore -- MediaStore.Video accepts
+     * any path under external storage, not just the canonical media roots.
+     * That matters for WhatsApp / Telegram / Download / etc. source videos
+     * whose owning folder is not DCIM/Movies/Pictures. If MediaStore later
+     * rejects the insert (which can happen on some OEM builds), the caller
+     * falls back to Movies/FossifyGallery.
      */
     private fun computeRelativePath(absoluteParent: String): String? {
         val externalRoot = android.os.Environment.getExternalStorageDirectory().absolutePath
         if (!absoluteParent.startsWith("$externalRoot/")) return null
         val rel = absoluteParent.substring(externalRoot.length + 1)
-        val top = rel.substringBefore('/')
-        if (top !in setOf("DCIM", "Movies", "Pictures")) return null
+        if (rel.isEmpty()) return null
         return if (rel.endsWith('/')) rel else "$rel/"
     }
 
